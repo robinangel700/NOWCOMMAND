@@ -1,55 +1,58 @@
-import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Toaster } from "sonner";
+import { AuthProvider, useAuth } from "@/lib/auth";
+import Shell from "@/components/Shell";
+import Landing from "@/pages/Landing";
+import Pricing from "@/pages/Pricing";
+import Auth from "@/pages/Auth";
+import About from "@/pages/About";
+import CheckoutSuccess from "@/pages/CheckoutSuccess";
+import Dashboard from "@/pages/Dashboard";
+import { DropsList, DropDetail } from "@/pages/Drops";
+import Community from "@/pages/Community";
+import { NotesPage, BookmarksPage } from "@/pages/Personal";
+import Affiliate from "@/pages/Affiliate";
+import Billing from "@/pages/Billing";
+import Admin from "@/pages/Admin";
 import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
-import { HOME } from "@/constants/testIds";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          data-testid={HOME.emergentLink}
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+function Protected({ children, adminOnly = false, memberOnly = false }) {
+  const { user, loading } = useAuth();
+  const loc = useLocation();
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="hourglass animate-glow"/></div>;
+  if (!user) return <Navigate to={`/login?next=${loc.pathname}`} replace />;
+  if (adminOnly && user.role !== "admin") return <Navigate to="/dashboard" replace />;
+  if (memberOnly && !["full", "foundational", "admin"].includes(user.tier) && user.role !== "admin") return <Navigate to="/pricing" replace />;
+  return children;
+}
 
 function App() {
   return (
-    <div className="App">
+    <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
+        <Shell>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/login" element={<Auth mode="login" />} />
+            <Route path="/signup" element={<Auth mode="signup" />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/checkout/success" element={<Protected><CheckoutSuccess /></Protected>} />
+            <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
+            <Route path="/drops" element={<Protected memberOnly><DropsList /></Protected>} />
+            <Route path="/drops/:id" element={<Protected memberOnly><DropDetail /></Protected>} />
+            <Route path="/community" element={<Protected memberOnly><Community /></Protected>} />
+            <Route path="/notes" element={<Protected memberOnly><NotesPage /></Protected>} />
+            <Route path="/bookmarks" element={<Protected memberOnly><BookmarksPage /></Protected>} />
+            <Route path="/affiliate" element={<Protected><Affiliate /></Protected>} />
+            <Route path="/billing" element={<Protected><Billing /></Protected>} />
+            <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Shell>
+        <Toaster theme="dark" position="top-right" toastOptions={{ style: { background: "#121212", color: "#F2EFE9", border: "1px solid #332D21", borderRadius: 0 } }} />
       </BrowserRouter>
-    </div>
+    </AuthProvider>
   );
 }
 
