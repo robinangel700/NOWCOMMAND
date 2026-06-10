@@ -1,0 +1,99 @@
+{
+  "theme": "Dark",
+  "archetype": "Archetype 5 (Luxury) - Prophetic & Sovereign",
+  "design_philosophy": {
+    "core_concept": "Cast out Mammon, Rule over the Increase. The aesthetic is sovereign, authoritative, and touched by gold. It feels like entering an ancient, high-tech divine vault. No generic SaaS purple, no rounded friendly corners.",
+    "emotional_tone": "Authoritative, mysterious, high-value, anointed, urgent. 'I am qualifying them for dominion and legacy.'",
+    "visual_mood": "Deep obsidian backgrounds, glowing metallic/gold touches, sharp serifs, monolithic bento layouts."
+  },
+  "typography": {
+    "font_families": {
+      "headings": "'Cormorant Garamond', serif",
+      "body": "'Outfit', sans-serif",
+      "mono": "'JetBrains Mono', monospace"
+    },
+    "scales": {
+      "h1": "text-5xl md:text-6xl tracking-tighter leading-none font-bold",
+      "h2": "text-3xl md:text-4xl tracking-tight leading-tight font-semibold",
+      "h3": "text-2xl md:text-3xl tracking-tight font-medium",
+      "h4": "text-xl font-medium tracking-wide uppercase",
+      "body": "text-base md:text-lg leading-relaxed text-[#A39F98]",
+      "small": "text-sm tracking-wide text-[#A39F98]",
+      "overline": "text-xs uppercase tracking-[0.2em] font-mono text-[#D4AF37]"
+    },
+    "google_fonts_url": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+  },
+  "colors": {
+    "background": "#0A0A0A",
+    "surface": "#121212",
+    "surface_elevated": "#1A1A1A",
+    "border": "#332D21",
+    "border_highlight": "#5C4B24",
+    "primary": "#D4AF37",
+    "primary_hover": "#E5C158",
+    "primary_foreground": "#0A0A0A",
+    "secondary": "#8C2727",
+    "secondary_foreground": "#F2EFE9",
+    "text_primary": "#F2EFE9",
+    "text_secondary": "#A39F98",
+    "text_muted": "#66635D",
+    "gold_gradient": "linear-gradient(135deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C)"
+  },
+  "spacing_and_layout": {
+    "philosophy": "Monolithic and structural. Use sharp edges (rounded-none).",
+    "landing_page": {
+      "section_padding": "py-24 md:py-32",
+      "hero_layout": "Asymmetrical or centered with massive text scale. Overlays should be dark enough to let gold text glow."
+    },
+    "dashboard": {
+      "grid": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+      "card_padding": "p-6 md:p-8"
+    },
+    "borders": "1px solid #332D21. Use border-b on headers. No soft shadows, use glowing drop-shadows only on hover for primary elements.",
+    "radius": "rounded-none"
+  },
+  "components": {
+    "button_primary": "bg-[#D4AF37] text-[#0A0A0A] font-medium font-body uppercase tracking-[0.1em] px-8 py-4 rounded-none hover:bg-[#E5C158] transition-all duration-300 shadow-[0_0_15px_rgba(212,175,55,0.2)] hover:shadow-[0_0_25px_rgba(212,175,55,0.4)]",
+    "button_secondary": "bg-transparent text-[#D4AF37] border border-[#D4AF37] font-medium font-body uppercase tracking-[0.1em] px-8 py-4 rounded-none hover:bg-[#D4AF37]/10 transition-colors",
+    "card": "bg-[#121212] border border-[#332D21] rounded-none p-6 transition-all duration-300 hover:border-[#5C4B24]",
+    "input": "bg-transparent border-b border-[#332D21] text-[#F2EFE9] placeholder-[#66635D] rounded-none px-0 py-3 focus:outline-none focus:border-[#D4AF37] focus:ring-0 transition-colors w-full font-body",
+    "badge": "bg-[#332D21]/50 text-[#D4AF37] border border-[#D4AF37]/30 px-3 py-1 text-xs uppercase tracking-widest font-mono rounded-none",
+    "nav_bar": "fixed top-0 w-full z-50 bg-[#0A0A0A]/90 backdrop-blur-md border-b border-[#332D21]"
+  },
+  "motion_and_interactions": {
+    "hover_states": "Interactive elements should have a slight luminance increase. Gold borders shift to brighter gold. Cards elevate slightly (-translate-y-1) with a subtle gold ambient shadow.",
+    "page_transitions": "Slow, deliberate fade-ins (opacity-0 to opacity-100 duration-700).",
+    "scroll_effects": "Use subtle parallax for background textures. Fade up and in for text elements on scroll.",
+    "loading": "Use an hourglass or glowing gold keyframe animation."
+  },
+  "media": {
+    "images": {
+      "hero_sovereign": {
+        "url": "https://images.unsplash.com/flagged/photo-1565241651368-35437ca5563f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTJ8MHwxfHNlYXJjaHwxfHxjcm93biUyMGdvbGQlMjBkYXJrJTIwc2hhZG93fGVufDB8fHx8MTc4MTA1ODA2OXww&ixlib=rb-4.1.0&q=85",
+        "description": "Person in black suit holding a gold crown in dark shadows. Use for Hero or 'Rule over the Increase' section.",
+        "placement": "Landing Page Hero or Concept Section"
+      },
+      "texture_abstract_gold": {
+        "url": "https://images.unsplash.com/photo-1709377195538-5522ed0f9e10?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjh8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMGRhcmslMjBnb2xkJTIwdGV4dHVyZXxlbnwwfHx8fDE3ODEwNTgwNTh8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Amber and dark curves on black. Perfect for section backgrounds or card overlays.",
+        "placement": "Background textures, Card overlays (with high transparency)"
+      },
+      "concept_chronos": {
+        "url": "https://images.unsplash.com/photo-1518281361980-b26bfd556770?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzl8MHwxfHNlYXJjaHwxfHxob3VyZ2xhc3MlMjBzYW5kJTIwZGFyayUyMGx1eHVyeXxlbnwwfHx8fDE3ODEwNTgwNTh8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Clear hourglass on dark background. Represents 'Chronos' and 'Divine Timing'.",
+        "placement": "Timing/Delay concept section or membership 'Weekly Drops' visual"
+      }
+    }
+  },
+  "instructions_to_main_agent": [
+    "Inject the Google Fonts URL into the public/index.html or root layout.",
+    "Update tailwind.config.js to include the custom font families ('cormorant', 'outfit', 'mono') and the exact color hex codes specified.",
+    "Do NOT use Shadcn Card component. Use raw HTML/Tailwind divs with rounded-none and strict borders for the monolithic luxury feel.",
+    "Use Shadcn strictly for functional components (Dialogs, Dropdowns, Datepickers) but override their rounded borders to rounded-none.",
+    "All interactive elements (buttons, links, form inputs) MUST have a data-testid attribute for testing (e.g., data-testid='hero-cta-button').",
+    "For the dashboard, enforce the 'Control Room Grid' with dark surfaces and muted gold borders.",
+    "For the Landing page, utilize massive scale for H1/H2 (text-5xl to text-7xl) using 'Cormorant Garamond'. Use high contrast.",
+    "Never use generic placeholder images. Rely solely on the media URLs provided in this file.",
+    "Avoid centering paragraphs. Left-align dense text for readability."
+  ]
+}
