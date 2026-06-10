@@ -10,7 +10,7 @@ const TABS = [
   { id: "summary", label: "Summary", icon: FileText },
   { id: "community", label: "Community", icon: MessageSquare },
   { id: "reminders", label: "Reminders", icon: Bell },
-  { id: "outbox", label: "Email Log", icon: Mail },
+  { id: "email-log", label: "Email Log", icon: Mail },
   { id: "launch", label: "Launch", icon: Rocket },
 ];
 
@@ -44,7 +44,7 @@ export default function Admin() {
         {tab === "summary" && <Summary />}
         {tab === "community" && <CommunityAdmin />}
         {tab === "reminders" && <Reminders />}
-        {tab === "outbox" && <Outbox />}
+        {tab === "email-log" && <Outbox />}
         {tab === "launch" && <LaunchPanel />}
       </div>
     </div>

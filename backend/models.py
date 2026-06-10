@@ -5,7 +5,7 @@ from typing import Optional, List, Literal
 
 class SignupIn(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8)
     name: Optional[str] = None
 
 

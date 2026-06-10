@@ -714,6 +714,10 @@ def _is_member_or_admin(user: dict) -> bool:
     return user.get("role") == "admin" or user.get("tier") in ("full", "foundational")
 
 
+def _is_full_member_or_admin(user: dict) -> bool:
+    return user.get("role") == "admin" or user.get("tier") == "full"
+
+
 @api.get("/community/feed")
 async def community_feed(user: dict = Depends(get_current_user)):
     if not _is_member_or_admin(user):
@@ -732,8 +736,8 @@ async def community_feed(user: dict = Depends(get_current_user)):
 
 @api.post("/community/posts")
 async def create_post(body: PostIn, user: dict = Depends(get_current_user)):
-    if not _is_member_or_admin(user):
-        raise HTTPException(403, "Members only")
+    if not _is_full_member_or_admin(user):
+        raise HTTPException(403, "Sovereign tier only")
     db = get_db()
     pid = str(uuid.uuid4())
     await db.posts.insert_one({
@@ -761,8 +765,8 @@ async def get_comments(post_id: str, user: dict = Depends(get_current_user)):
 
 @api.post("/community/posts/{post_id}/comments")
 async def add_comment(post_id: str, body: CommentIn, user: dict = Depends(get_current_user)):
-    if not _is_member_or_admin(user):
-        raise HTTPException(403, "Members only")
+    if not _is_full_member_or_admin(user):
+        raise HTTPException(403, "Sovereign tier only")
     db = get_db()
     post = await db.posts.find_one({"id": post_id})
     if not post:
@@ -987,6 +991,8 @@ async def admin_monthly_summary(body: MonthlySummaryIn, user: dict = Depends(get
     if body.send_now:
         await scheduler._send_summary(doc)
         await db.monthly_summaries.update_one({"id": doc["id"]}, {"$set": {"sent": True, "sent_at": now_iso()}})
+        doc["sent"] = True
+        doc["sent_at"] = now_iso()
     doc.pop("_id", None)
     return {"summary": doc}
 
