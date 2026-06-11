@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Download, Sparkles, Users, BookOpen, Clock, TrendingUp, Hourglass, Lock } from "lucide-react";
-import { api, fmt } from "../lib/api";
+import { Download, Sparkles, Users, BookOpen, Clock, TrendingUp, Hourglass, Lock,
+  Crown, Feather, Target, Bookmark, MessageSquare, MessagesSquare, Trophy, Calendar,
+  Moon, Flame, Headphones, BookMarked } from "lucide-react";
+import { api, fmt, BACKEND_URL } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
 import SetupWizard from "../components/SetupWizard";
+
+const BADGE_ICONS = {
+  crown: Crown, book: BookOpen, feather: Feather, target: Target, bookmark: Bookmark,
+  message: MessageSquare, messages: MessagesSquare, trophy: Trophy, sparkles: Sparkles,
+  users: Users, calendar: Calendar, moon: Moon, flame: Flame,
+};
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -13,11 +21,15 @@ export default function Dashboard() {
   const [drops, setDrops] = useState([]);
   const [upsell, setUpsell] = useState(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [badges, setBadges] = useState(null);
+  const [dominion, setDominion] = useState(null);
 
   useEffect(() => {
     api.get("/progress").then((r) => setProgress(r.data));
     api.get("/drops").then((r) => setDrops(r.data.drops || []));
     api.get("/public/state").then(() => {});
+    api.get("/me/badges").then((r) => setBadges(r.data)).catch(() => {});
+    api.get("/dominion").then((r) => setDominion(r.data)).catch(() => {});
     const params = new URLSearchParams(location.search);
     if (params.get("wizard") === "1") {
       setShowWizard(true);
@@ -38,6 +50,21 @@ export default function Dashboard() {
       a.click(); window.URL.revokeObjectURL(url);
       toast.success("Codes downloaded");
     } catch { toast.error("Unable to download"); }
+  };
+
+  const downloadBook = async () => {
+    try {
+      // If admin uploaded a custom book file, open it directly; else stream the generated PDF.
+      const customUrl = dominion?.book?.url;
+      if (customUrl) {
+        window.open(customUrl.startsWith("http") ? customUrl : `${BACKEND_URL}${customUrl}`, "_blank");
+        return;
+      }
+      const resp = await api.get("/downloads/welcome_book", { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([resp.data], { type: "application/pdf" }));
+      const a = document.createElement("a"); a.href = url; a.download = "Dominion_Over_Mammon.pdf"; a.click(); window.URL.revokeObjectURL(url);
+      toast.success("Book downloaded");
+    } catch { toast.error("Could not download"); }
   };
 
   const published = drops.filter((d) => d.published && !d.locked);
@@ -76,14 +103,7 @@ export default function Dashboard() {
           <button data-testid="dashboard-download" onClick={downloadPDF} className="btn-gold">
             <Download className="w-4 h-4" /> Activation Codes
           </button>
-          <button data-testid="dashboard-book" onClick={async () => {
-            try {
-              const resp = await api.get("/downloads/welcome_book", { responseType: "blob" });
-              const url = window.URL.createObjectURL(new Blob([resp.data], { type: "application/pdf" }));
-              const a = document.createElement("a"); a.href = url; a.download = "Dominion_Over_Mammon.pdf"; a.click(); window.URL.revokeObjectURL(url);
-              toast.success("Book downloaded");
-            } catch { toast.error("Could not download"); }
-          }} className="btn-ghost">
+          <button data-testid="dashboard-book" onClick={downloadBook} className="btn-ghost">
             <Download className="w-4 h-4" /> Welcome Book
           </button>
         </div>
@@ -143,10 +163,69 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
+
+            {badges && (
+              <div className="mt-12" data-testid="badges-section">
+                <div className="flex items-baseline justify-between mb-6">
+                  <h2 className="font-display text-3xl text-cream">Marks of the Steward</h2>
+                  <span className="overline">{badges.earned_count}/{badges.total} earned</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {badges.badges.map((b) => {
+                    const Icon = BADGE_ICONS[b.icon] || Sparkles;
+                    const pct = b.goal ? Math.min(100, Math.round(((b.progress || 0) / b.goal) * 100)) : (b.earned ? 100 : 0);
+                    return (
+                      <div key={b.id} data-testid={`badge-${b.id}`} title={b.desc}
+                        className={`panel p-4 transition-all ${b.earned ? "border-gold" : "opacity-50"}`}>
+                        <Icon className={`w-6 h-6 mb-2 ${b.earned ? "text-gold" : "text-textDim"}`} />
+                        <div className={`font-display text-base leading-tight ${b.earned ? "text-cream" : "text-textMuted"}`}>{b.label}</div>
+                        <p className="text-textMuted text-[11px] mt-1 line-clamp-2">{b.desc}</p>
+                        {!b.earned && b.goal > 1 && (
+                          <div className="h-1 bg-borderGold mt-2 relative overflow-hidden">
+                            <div className="absolute inset-y-0 left-0 bg-gold/60" style={{ width: `${pct}%` }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {dominion && (
+              <div className="panel p-6" data-testid="dominion-library">
+                <div className="overline mb-3">// THE DOMINION LIBRARY</div>
+                <div className="flex items-start gap-3 pb-4 border-b border-borderGold">
+                  <BookMarked className="w-5 h-5 text-gold shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <div className="font-display text-lg text-cream">Dominion Over Mammon</div>
+                    <p className="text-textMuted text-xs mt-1">{dominion.book.note}</p>
+                    {dominion.book.status === "available" ? (
+                      <button data-testid="dominion-book-download" onClick={downloadBook} className="btn-ghost text-xs mt-3"><Download className="w-3 h-3"/> Download book</button>
+                    ) : (
+                      <span className="overline text-textDim mt-3 inline-block"><Hourglass className="w-3 h-3 inline"/> Forthcoming</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 pt-4">
+                  <Headphones className="w-5 h-5 text-gold shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <div className="font-display text-lg text-cream">The Audiobook</div>
+                    <p className="text-textMuted text-xs mt-1">{dominion.audiobook.note}</p>
+                    {dominion.audiobook.status === "available" && dominion.audiobook.url ? (
+                      <audio data-testid="dominion-audio" controls preload="none" className="mt-3 w-full"
+                        src={dominion.audiobook.url.startsWith("http") ? dominion.audiobook.url : `${BACKEND_URL}${dominion.audiobook.url}`} />
+                    ) : (
+                      <span className="overline text-textDim mt-3 inline-block" data-testid="dominion-audio-forthcoming"><Hourglass className="w-3 h-3 inline"/> Forthcoming</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="panel p-6">
               <div className="overline mb-3">// COMING NEXT</div>
               {upcoming.length === 0 && <p className="text-textMuted text-sm">Nothing on the schedule yet.</p>}

@@ -48,14 +48,19 @@ def create_or_get_customer(email: str, name: Optional[str], existing_id: Optiona
 
 # Price helpers -------------------------------------------------------------
 
-def plan_to_price_data(plan: str, current_full_cents: int) -> Tuple[int, str, str]:
-    """Returns (unit_amount_cents, interval, description) for stripe price_data."""
+def plan_to_price_data(plan: str, pricing: dict) -> Tuple[int, str, str]:
+    """Returns (unit_amount_cents, interval, description) for stripe price_data.
+
+    `pricing` is the resolved pricing dict (admin overrides + env fallback)
+    so that price changes in the Admin panel flow straight into new Stripe
+    checkouts. current_full = pricing['full_monthly_cents'].
+    """
     if plan == "full_monthly":
-        return current_full_cents, "month", "NOWCOMMAND Sovereign Membership"
+        return int(pricing["full_monthly_cents"]), "month", "NOWCOMMAND Sovereign Membership"
     if plan == "full_annual":
-        return int(os.environ.get("PRICE_FULL_ANNUAL_CENTS", 50000)), "year", "NOWCOMMAND Sovereign Annual"
+        return int(pricing["full_annual_cents"]), "year", "NOWCOMMAND Sovereign Annual"
     if plan == "foundational_monthly":
-        return int(os.environ.get("PRICE_FOUNDATIONAL_MONTHLY_CENTS", 1100)), "month", "NOWCOMMAND Foundational"
+        return int(pricing["foundational_monthly_cents"]), "month", "NOWCOMMAND Foundational"
     raise ValueError(f"Unknown plan {plan}")
 
 
@@ -64,11 +69,11 @@ def create_subscription_checkout(
     plan: str,
     success_url: str,
     cancel_url: str,
-    current_full_cents: int,
+    pricing: dict,
     metadata: dict,
 ) -> dict:
     """Returns {url, session_id} or raises."""
-    amount, interval, desc = plan_to_price_data(plan, current_full_cents)
+    amount, interval, desc = plan_to_price_data(plan, pricing)
     if not is_real_key():
         # DEV-mode fallback: emulate a checkout by returning a frontend URL that
         # will immediately mark success. Used only when no real Stripe key.
@@ -199,6 +204,55 @@ def update_subscription_price(subscription_id: str, new_amount_cents: int, inter
         proration_behavior="create_prorations",
     )
     return dict(s)
+
+
+def sync_catalog(pricing: dict) -> dict:
+    """Push the current pricing to Stripe as a Product + recurring Prices.
+
+    Checkout already uses inline price_data (so new checkouts always reflect the
+    latest Admin price), but this also materializes durable Product/Price objects
+    in the Stripe catalog so the creator can see/manage them in the Stripe
+    Dashboard. Existing subscribers keep their locked-in price (new signups only).
+
+    Returns {synced, dev_mode, product_id, prices}.
+    """
+    if not is_real_key():
+        return {"synced": False, "dev_mode": True, "reason": "no real Stripe key in this environment"}
+    _init()
+    try:
+        # One canonical product for the membership.
+        product = stripe.Product.create(
+            name="NOWCOMMAND Membership",
+            metadata={"app": "nowcommand"},
+        ) if False else None
+        # Find-or-create by a stable lookup via metadata is overkill; create fresh
+        # Price objects each sync (Prices are immutable). We tag them so the latest
+        # is identifiable. Reuse a product if one already exists.
+        existing = stripe.Product.search(query="metadata['app']:'nowcommand'", limit=1)
+        if existing and existing.data:
+            product = existing.data[0]
+        else:
+            product = stripe.Product.create(name="NOWCOMMAND Membership", metadata={"app": "nowcommand"})
+        prices = {}
+        specs = [
+            ("full_monthly", int(pricing["full_monthly_cents"]), "month"),
+            ("full_annual", int(pricing["full_annual_cents"]), "year"),
+            ("foundational_monthly", int(pricing["foundational_monthly_cents"]), "month"),
+        ]
+        for key, amount, interval in specs:
+            p = stripe.Price.create(
+                product=product["id"],
+                currency="usd",
+                unit_amount=amount,
+                recurring={"interval": interval},
+                metadata={"plan": key, "current": "true"},
+                nickname=f"NOWCOMMAND {key}",
+            )
+            prices[key] = p["id"]
+        return {"synced": True, "dev_mode": False, "product_id": product["id"], "prices": prices}
+    except Exception as e:
+        log.exception("sync_catalog failed")
+        return {"synced": False, "dev_mode": False, "error": str(e)}
 
 
 def create_portal_session(customer_id: str, return_url: str) -> dict:

@@ -1,0 +1,44 @@
+{
+  "summary": "Frontend-only verification of Phase 4 features (Dominion Library, achievement badges, testimonial image upload, Sales Wizard, Affiliate tab). 6 of 7 review-request flows PASS. 1 HIGH bug: /testimonials gates the submit form to tier=='full'|'foundational' only, so admin (tier=='admin') sees the upgrade CTA instead of the form — testimony-image-btn/headline/body/submit testids are NOT rendered for admin. Backend was intentionally skipped per request (previously 86/86 pytest pass).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Testimonials.jsx",
+        "issue": "Submit form is gated by `user?.tier === 'full' || user?.tier === 'foundational'` (line 59). Admin users (tier=='admin') fall through to the 'Cross the threshold to share your story' upgrade gate instead of seeing the form. As a result, testimony-image-btn, testimony-headline, testimony-body, testimony-submit testids do NOT render for admin — directly contradicts review-request requirement #5. Backend POST /testimonials accepts admin token (admin passes is_member checks elsewhere), so this is a pure frontend tier-check oversight. Fix: change condition to `['full','foundational','admin'].includes(user?.tier)` (or use existing is_member helper).",
+        "selector": "[data-testid='testimony-form']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_flows": [
+    "LOGIN: admin login at /login → redirects to /dashboard (works)",
+    "DASHBOARD: badges-section visible with 13 badges; badge-threshold ('Crossed the Threshold') is present and rendered earned",
+    "DASHBOARD: dominion-library card visible with dominion-book-download button + 'Forthcoming' state via dominion-audio-forthcoming (dominion-audio absent because no audio URL set — expected behaviour)",
+    "ADMIN /admin?tab=launch: dominion-manager visible with Book PDF + Audiobook upload controls and URL paste fields",
+    "ADMIN all-tabs smoke: health, drops, vault, brand, pricing, email, testimonials, launch all render with zero visible .error elements",
+    "STEWARDSHIP: three tabs render — steward-tab-billing, steward-tab-affiliate, steward-tab-support",
+    "STEWARDSHIP/Sales Wizard (steward-tab-support): sales-wizard renders; walk-through frame→audience(input required)→hook(copy-hook-0)→dm→objections(copy-objection-0)→followup(copy-followup-0)→drop screen reaches 'You're armed' AND affiliate-milestone block",
+    "STEWARDSHIP/Multiply (steward-tab-affiliate): affiliate code 'ROBIN' shown, lifetime earnings ($0, 0 stewarded), affiliate-link with /?ref=ROBIN, copy-affiliate button works"
+  ],
+  "test_report_links": ["/app/test_reports/iteration_4.json"],
+  "action_items": [
+    "FIX HIGH: Testimonials.jsx line 59 — extend tier gate to include 'admin' so robinangel700@gmail.com can submit testimonies (currently he cannot, only sees 'Cross the threshold' button). Suggested patch: replace `user?.tier === 'full' || user?.tier === 'foundational'` with `['full','foundational','admin'].includes(user?.tier)`."
+  ],
+  "critical_code_review_comments": [
+    "Testimonials.jsx tier check is duplicated in multiple places across the app (Dashboard, Stewardship); consider extracting a single `canSubmitContent(user)` helper in lib/auth.jsx that returns true for admin + paid tiers. Avoids the exact bug found above.",
+    "Stewardship.jsx SalesWizard has 7 inline step blocks (lines 372-462) — close to 100 lines. As more steps are added (likely), extract each step to its own component to keep the file under 500 lines.",
+    "Dashboard.jsx /me/badges fetch lacks loading + error states — if the endpoint hangs or 500s, the badges-section silently shows nothing. Add a skeleton + error fallback.",
+    "Sales Wizard step 1 (audience) does NOT have data-testid on its input field, making it hard for automated tests to fill the required field. Add data-testid='wizard-audience-input'."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (per request — previously 100%)", "frontend": "~88% (7/8 review items pass; testimonials submit blocked for admin)"},
+  "test_credentials": "Admin: robinangel700@gmail.com / BoopLoop777 (worked).",
+  "seed_data_creation": "None.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 4 frontend largely working. After main agent fixes Testimonials.jsx tier gate, re-run /testimonials flow as admin to confirm testimony-image-btn, testimony-headline, testimony-body, testimony-submit are present and submit produces 'Submitted — Robin will review.' toast + clears form. All other Phase 4 UI verified via Playwright in this iteration (see verified_flows). Stewardship Sales Wizard requires typing into the audience input on step 2 before Continue is enabled — automation must fill that input.",
+  "rca of the issue": "Testimonials.jsx line 59 conditional `user?.tier === 'full' || user?.tier === 'foundational'` was written assuming only paid members would visit /testimonials. The admin role uses tier='admin' (see /app/memory/test_credentials.md and review-request other_misc_info). Because no admin-bypass branch exists, the JSX falls through to the upgrade-gate else block (line 76-79), which renders only a Link to /pricing — none of the requested data-testids exist in the DOM. Reproduction: login as admin → navigate to /testimonials → observe 'CROSS THE THRESHOLD TO SHARE YOUR STORY' button instead of submit form. Fix: include 'admin' in the tier whitelist OR import `is_member`-equivalent helper used elsewhere in the codebase."
+}

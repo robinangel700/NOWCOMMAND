@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Sparkles, CheckSquare, Square, Send, Users, Hourglass, Mail, FileText, MessageSquare, Bell, Plus, Rocket, BookOpen, UserCog, ChevronRight, ExternalLink, AtSign, Edit3, ArrowRight, Eye, Award, Palette, DollarSign, Megaphone, HandHeart, Copy } from "lucide-react";
-import { api, fmt } from "../lib/api";
+import { api, fmt, BACKEND_URL } from "../lib/api";
 import { toast } from "sonner";
 import { MyProfile } from "./Profile";
 
@@ -658,6 +658,69 @@ function LaunchPanel() {
         <div className="panel p-5"><h3 className="font-display text-xl text-cream mb-2">Regenerate Activation Codes PDF</h3><button onClick={regen} className="btn-ghost mt-3 text-xs">Regenerate</button></div>
         <div className="panel p-5"><h3 className="font-display text-xl text-cream mb-2">Regenerate Welcome Book PDF</h3><p className="text-textMuted text-xs">"Dominion Over Mammon & The Spirit of Delay"</p><button onClick={regenBook} className="btn-ghost mt-3 text-xs">Regenerate</button></div>
       </div>
+      <DominionManager />
+    </div>
+  );
+}
+
+/* ----------------- DOMINION LIBRARY MANAGER ----------------- */
+function DominionManager() {
+  const [d, setD] = useState(null);
+  const [busy, setBusy] = useState("");
+  const load = () => api.get("/admin/dominion").then((r) => setD(r.data.dominion));
+  useEffect(() => { load(); }, []);
+  if (!d) return null;
+  const save = async (patch) => {
+    const next = { ...d, ...patch }; setD(next);
+    await api.post("/admin/dominion", patch); toast.success("Dominion library updated");
+  };
+  const uploadFile = async (e, field, purpose) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    if (f.size > 60 * 1024 * 1024) { toast.error("Max 60MB. For large audiobooks, paste a hosted URL instead."); return; }
+    setBusy(field);
+    try {
+      const data = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
+      const resp = await api.post("/upload/file", { data, purpose });
+      await save({ [field]: resp.data.url });
+      toast.success("Uploaded & unlocked for members");
+    } catch (err) { toast.error(err?.response?.data?.detail || "Upload failed"); } finally { setBusy(""); }
+  };
+  return (
+    <div className="panel p-6" data-testid="dominion-manager">
+      <div className="overline mb-1">// DOMINION LIBRARY</div>
+      <p className="text-textMuted text-sm mb-5">Upload the book PDF and the audiobook. Until you upload, members see "Forthcoming". The moment a file (or URL) is set, it unlocks automatically on every member dashboard.</p>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Book */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-display text-xl text-cream">The Book (PDF)</h4>
+            <span className="overline">{d.book_status === "available" ? "AVAILABLE" : "FORTHCOMING"}</span>
+          </div>
+          <p className="text-xs text-textDim">Leave blank to ship the auto-generated welcome book. Upload to replace it.</p>
+          <label className="btn-ghost text-xs cursor-pointer inline-flex"><input type="file" accept="application/pdf" className="hidden" onChange={(e) => uploadFile(e, "book_url", "dominion_book")}/>{busy === "book_url" ? "Uploading…" : "Upload book PDF"}</label>
+          <input value={d.book_url || ""} onChange={(e) => setD({ ...d, book_url: e.target.value })} onBlur={() => save({ book_url: d.book_url })} placeholder="…or paste a hosted PDF URL"/>
+          <select value={d.book_status} onChange={(e) => save({ book_status: e.target.value })}>
+            <option value="available">Available (members can read)</option>
+            <option value="forthcoming">Forthcoming (hidden)</option>
+          </select>
+        </div>
+
+        {/* Audiobook */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-display text-xl text-cream">The Audiobook</h4>
+            <span className="overline">{(d.audiobook_status === "available" && d.audiobook_url) ? "AVAILABLE" : "FORTHCOMING"}</span>
+          </div>
+          <p className="text-xs text-textDim">For large files, hosting elsewhere and pasting the URL is most reliable.</p>
+          <label className="btn-ghost text-xs cursor-pointer inline-flex"><input type="file" accept="audio/*" className="hidden" onChange={(e) => uploadFile(e, "audiobook_url", "dominion_audio")}/>{busy === "audiobook_url" ? "Uploading…" : "Upload audio file"}</label>
+          <input value={d.audiobook_url || ""} onChange={(e) => setD({ ...d, audiobook_url: e.target.value })} onBlur={() => save({ audiobook_url: d.audiobook_url })} placeholder="…or paste a hosted audio URL (mp3/m4a)"/>
+          <select value={d.audiobook_status} onChange={(e) => save({ audiobook_status: e.target.value })}>
+            <option value="available">Available (members can listen)</option>
+            <option value="forthcoming">Forthcoming (shows as coming soon)</option>
+          </select>
+        </div>
+      </div>
     </div>
   );
 }
@@ -676,6 +739,7 @@ function TestimonialsAdmin() {
           <div key={t.id} data-testid={`adm-test-${t.id}`} className="panel p-5">
             <div className="overline mb-2">{t.status?.toUpperCase()} · {fmt.datetime(t.created_at)}</div>
             {t.headline && <div className="font-display text-xl text-gold">"{t.headline}"</div>}
+            {t.image_url && <img src={t.image_url.startsWith("http") ? t.image_url : `${BACKEND_URL}${t.image_url}`} alt="" className="max-h-48 object-cover border border-borderGold mt-2"/>}
             <p className="text-cream/90 whitespace-pre-wrap mt-2">{t.body}</p>
             <div className="flex gap-2 mt-4">
               <button onClick={() => moderate(t.id, "approved")} className="btn-ghost text-xs">Approve</button>

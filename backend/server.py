@@ -27,7 +27,7 @@ from models import (
     ChecklistItemIn, SettingsIn, MonthlySummaryIn, ReminderIn, CancelIn,
     WaitlistIn, ManifestoIn, ArticleIn, ArticleUpdate, LeadIn, ProfileIn,
     EmailTemplateUpdate, BrandIn, PricingIn, TestimonialIn, TestimonialModerate,
-    DropCommentIn, DMSendIn, NotifPrefsIn,
+    DropCommentIn, DMSendIn, NotifPrefsIn, DominionIn,
 )
 from services import email_service, stripe_service, pdf_service, scheduler, welcome_book, ad_copy
 
@@ -83,12 +83,31 @@ async def _active_member_count() -> int:
     return await db.users.count_documents({"tier": {"$in": ["full", "foundational"]}})
 
 
+async def _resolve_pricing() -> dict:
+    """Effective pricing = Admin overrides (DB) -> env fallback.
+
+    This is the single source of truth so a price change in the Admin panel
+    flows straight into new Stripe checkouts and the public site.
+    """
+    o = await _get_setting("pricing_overrides") or {}
+    return {
+        "full_monthly_cents": int(o.get("full_monthly_cents", os.environ.get("PRICE_FULL_MONTHLY_CENTS", 4400))),
+        "full_after_promo_monthly_cents": int(o.get("full_after_promo_monthly_cents", os.environ.get("PRICE_FULL_AFTER_PROMO_CENTS", 7700))),
+        "full_annual_cents": int(o.get("full_annual_cents", os.environ.get("PRICE_FULL_ANNUAL_CENTS", 50000))),
+        "foundational_monthly_cents": int(o.get("foundational_monthly_cents", os.environ.get("PRICE_FOUNDATIONAL_MONTHLY_CENTS", 1100))),
+        "promo_days": int(o.get("promo_days", os.environ.get("LAUNCH_PROMO_DAYS", 21))),
+        "cap": int(o.get("cap", os.environ.get("MEMBERSHIP_CAP", 300))),
+        "show_foundational_publicly": bool(o.get("show_foundational_publicly", False)),
+    }
+
+
 async def _current_full_price_cents() -> int:
-    """Return $44 (during promo) or $77 (after) based on launch settings."""
+    """Return founder price (during promo) or post-promo price (after) based on launch settings."""
     launch = await _get_setting("launch") or {}
-    promo_days = int(launch.get("promo_days", 21))
-    promo_cents = int(os.environ.get("PRICE_FULL_MONTHLY_CENTS", 4400))
-    after_cents = int(os.environ.get("PRICE_FULL_AFTER_PROMO_CENTS", 7700))
+    pricing = await _resolve_pricing()
+    promo_days = int(launch.get("promo_days", pricing["promo_days"]))
+    promo_cents = pricing["full_monthly_cents"]
+    after_cents = pricing["full_after_promo_monthly_cents"]
     if not launch.get("launched") or not launch.get("launch_date"):
         return promo_cents  # pre-launch shows promo
     launched_at = datetime.fromisoformat(launch["launch_date"].replace("Z", "+00:00"))
@@ -119,20 +138,23 @@ async def root():
 @api.get("/public/state")
 async def public_state():
     launch = await _get_setting("launch") or {}
-    doors = await _get_setting("doors") or {"open": True, "cap": 300}
+    pricing = await _resolve_pricing()
+    doors = await _get_setting("doors") or {"open": True, "cap": pricing["cap"]}
     count = await _active_member_count()
+    cap = doors.get("cap", pricing["cap"])
     return {
         "launched": bool(launch.get("launched")),
         "launch_date": launch.get("launch_date"),
-        "promo_days": launch.get("promo_days", 21),
+        "promo_days": launch.get("promo_days", pricing["promo_days"]),
         "promo_remaining_seconds": await _promo_remaining_seconds(),
         "current_full_monthly_cents": await _current_full_price_cents(),
-        "annual_cents": int(os.environ.get("PRICE_FULL_ANNUAL_CENTS", 50000)),
-        "foundational_monthly_cents": int(os.environ.get("PRICE_FOUNDATIONAL_MONTHLY_CENTS", 1100)),
-        "after_promo_monthly_cents": int(os.environ.get("PRICE_FULL_AFTER_PROMO_CENTS", 7700)),
+        "annual_cents": pricing["full_annual_cents"],
+        "foundational_monthly_cents": pricing["foundational_monthly_cents"],
+        "after_promo_monthly_cents": pricing["full_after_promo_monthly_cents"],
+        "show_foundational_publicly": pricing["show_foundational_publicly"],
         "active_members": count,
-        "cap": doors.get("cap", 300),
-        "doors_open": bool(doors.get("open", True)) and count < doors.get("cap", 300),
+        "cap": cap,
+        "doors_open": bool(doors.get("open", True)) and count < cap,
         "stripe_real": stripe_service.is_real_key(),
     }
 
@@ -243,7 +265,8 @@ async def checkout_subscription(body: CheckoutIn, user: dict = Depends(get_curre
         raise HTTPException(403, "Doors are closed. Join the waitlist.")
 
     # If launched, after promo only allow current price (no $44 anymore).
-    current_full = await _current_full_price_cents()
+    pricing = await _resolve_pricing()
+    pricing = {**pricing, "full_monthly_cents": await _current_full_price_cents()}
 
     cust_id = stripe_service.create_or_get_customer(user["email"], user.get("name"), user.get("stripe_customer_id"))
     if cust_id and cust_id != user.get("stripe_customer_id"):
@@ -263,7 +286,7 @@ async def checkout_subscription(body: CheckoutIn, user: dict = Depends(get_curre
         plan=body.plan,
         success_url=success_url,
         cancel_url=cancel_url,
-        current_full_cents=current_full,
+        pricing=pricing,
         metadata=metadata,
     )
 
@@ -450,7 +473,8 @@ async def billing_cancel(body: CancelIn, user: dict = Depends(get_current_user))
         await db.users.update_one({"id": user["id"]}, {"$set": {"paused": True, "paused_at": now_iso()}})
         return {"status": "paused"}
     if body.action == "downgrade":
-        amt = int(os.environ.get("PRICE_FOUNDATIONAL_MONTHLY_CENTS", 1100))
+        pricing = await _resolve_pricing()
+        amt = pricing["foundational_monthly_cents"]
         stripe_service.update_subscription_price(sub_id, amt, "month", "NOWCOMMAND Foundational")
         await db.users.update_one({"id": user["id"]}, {"$set": {"tier": "foundational", "stripe_plan": "foundational_monthly"}})
         return {"status": "downgraded", "tier": "foundational"}
@@ -1636,7 +1660,13 @@ async def admin_set_pricing(body: PricingIn, user: dict = Depends(get_current_us
         doors = await _get_setting("doors") or {"open": True, "cap": 300}
         doors["cap"] = int(update["cap"])
         await _set_setting("doors", doors)
-    return {"pricing": current}
+    # Push the new pricing to Stripe automatically (new checkouts already use the
+    # latest price via inline price_data; this also materializes catalog objects).
+    pricing = await _resolve_pricing()
+    sync = stripe_service.sync_catalog(pricing)
+    if sync.get("synced"):
+        await _set_setting("stripe_catalog", {**sync, "synced_at": now_iso()})
+    return {"pricing": current, "stripe_sync": sync}
 
 
 # ============================================================
@@ -1655,6 +1685,7 @@ async def submit_testimonial(body: TestimonialIn, user: dict = Depends(get_curre
         "user_avatar": user.get("avatar_url", ""),
         "headline": body.headline or "",
         "body": body.body,
+        "image_url": body.image_url or "",
         "status": "pending",
         "created_at": now_iso(),
     }
@@ -1993,6 +2024,176 @@ async def admin_regen_welcome_book(user: dict = Depends(get_current_user)):
     await require_admin(user)
     path = welcome_book.ensure_pdf(force=True)
     return {"path": path}
+
+
+# ============================================================
+#  FILE UPLOAD (PDF / audio for Dominion library)
+# ============================================================
+_ALLOWED_FILE_EXT = {
+    "application/pdf": "pdf",
+    "audio/mpeg": "mp3", "audio/mp3": "mp3",
+    "audio/mp4": "m4a", "audio/x-m4a": "m4a",
+    "audio/wav": "wav", "audio/x-wav": "wav",
+    "audio/aac": "aac", "audio/ogg": "ogg",
+}
+
+@api.post("/upload/file")
+async def upload_file(payload: dict, user: dict = Depends(get_current_user)):
+    """Accept a data-URL (base64) for PDF/audio. Admin-only (book/audiobook assets)."""
+    await require_admin(user)
+    data = payload.get("data") or ""
+    purpose = payload.get("purpose", "asset")
+    if not data.startswith("data:"):
+        raise HTTPException(400, "Expected data URL")
+    try:
+        head, b64 = data.split(",", 1)
+        mime = head.split(":", 1)[1].split(";", 1)[0].strip().lower()
+        ext = _ALLOWED_FILE_EXT.get(mime)
+        if not ext:
+            raise HTTPException(400, f"Unsupported file type: {mime}")
+        raw = base64.b64decode(b64)
+        if len(raw) > 60 * 1024 * 1024:
+            raise HTTPException(413, "File too large (max 60MB). For large audiobooks, paste a hosted URL instead.")
+        fname = f"{purpose}_{uuid.uuid4().hex[:10]}.{ext}"
+        out_dir = ROOT_DIR / "static" / "uploads"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / fname).write_bytes(raw)
+        return {"url": f"/static/uploads/{fname}", "mime": mime}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("file upload failed")
+        raise HTTPException(400, f"Upload failed: {e}")
+
+
+# ============================================================
+#  DOMINION LIBRARY (book + audiobook — forthcoming → auto-unlock)
+# ============================================================
+
+DEFAULT_DOMINION = {
+    "book_url": "",
+    "book_status": "available",  # the generated PDF ships available by default
+    "book_note": "Dominion Over Mammon & The Spirit of Delay — your welcome volume.",
+    "audiobook_url": "",
+    "audiobook_status": "forthcoming",
+    "audiobook_note": "The narrated edition is being recorded. It unlocks here automatically the moment it lands.",
+}
+
+
+async def _dominion_settings() -> dict:
+    v = await _get_setting("dominion_assets") or {}
+    return {**DEFAULT_DOMINION, **v}
+
+
+@api.get("/dominion")
+async def member_dominion(user: dict = Depends(get_current_user)):
+    """Member-facing library state. Books show 'available' (download) or 'forthcoming'."""
+    if user.get("tier") not in ("full", "foundational") and user.get("role") != "admin":
+        raise HTTPException(403, "Active membership required")
+    s = await _dominion_settings()
+    # The book always has a generated PDF fallback, so it's downloadable.
+    book_available = s["book_status"] == "available"
+    audio_available = s["audiobook_status"] == "available" and bool(s["audiobook_url"])
+    return {
+        "book": {
+            "status": "available" if book_available else "forthcoming",
+            "url": s["book_url"] or "",  # empty => use /downloads/welcome_book
+            "note": s["book_note"],
+        },
+        "audiobook": {
+            "status": "available" if audio_available else "forthcoming",
+            "url": s["audiobook_url"] if audio_available else "",
+            "note": s["audiobook_note"],
+        },
+    }
+
+
+@api.get("/admin/dominion")
+async def admin_get_dominion(user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    return {"dominion": await _dominion_settings()}
+
+
+@api.post("/admin/dominion")
+async def admin_set_dominion(body: DominionIn, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    current = await _get_setting("dominion_assets") or {}
+    update = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    # Auto-flip status to available when a URL is set (auto-unlock behavior).
+    if update.get("audiobook_url"):
+        update.setdefault("audiobook_status", "available")
+    if update.get("book_url"):
+        update.setdefault("book_status", "available")
+    current.update(update)
+    await _set_setting("dominion_assets", current)
+    return {"dominion": {**DEFAULT_DOMINION, **current}}
+
+
+# ============================================================
+#  GAMIFICATION — ACHIEVEMENT BADGES (retention)
+# ============================================================
+
+@api.get("/me/badges")
+async def my_badges(user: dict = Depends(get_current_user)):
+    """Compute achievement badges from the member's real activity. No new schema."""
+    db = get_db()
+    uid = user["id"]
+    notes = await db.notes.count_documents({"user_id": uid})
+    bookmarks = await db.bookmarks.count_documents({"user_id": uid})
+    quizzes = await db.quiz_attempts.count_documents({"user_id": uid})
+    posts = await db.posts.count_documents({"user_id": uid, "deleted": {"$ne": True}})
+    wins = await db.posts.count_documents({"user_id": uid, "kind": "win", "deleted": {"$ne": True}})
+    comments = await db.comments.count_documents({"user_id": uid, "deleted": {"$ne": True}})
+    referrals = await db.affiliate_referrals.count_documents({"affiliate_user_id": uid})
+    testimonials = await db.testimonials.count_documents({"user_id": uid})
+
+    days_member = 0
+    sub_at = user.get("subscribed_at") or user.get("created_at")
+    if sub_at:
+        try:
+            days_member = (datetime.now(timezone.utc) - datetime.fromisoformat(sub_at.replace("Z", "+00:00"))).days
+        except Exception:
+            days_member = 0
+
+    def badge(bid, label, desc, icon, earned, progress=None, goal=None):
+        return {"id": bid, "label": label, "desc": desc, "icon": icon,
+                "earned": bool(earned), "progress": progress, "goal": goal}
+
+    badges = [
+        badge("threshold", "Crossed the Threshold", "You claimed your seat in NOWCOMMAND.", "crown", True),
+        badge("first_note", "First Codex", "Saved your first note on a drop.", "book", notes >= 1, notes, 1),
+        badge("scribe", "The Scribe", "Saved 5 notes — you study the codes.", "feather", notes >= 5, notes, 5),
+        badge("first_quiz", "Initiate", "Completed your first quiz.", "target", quizzes >= 1, quizzes, 1),
+        badge("collector", "Collector", "Bookmarked 3 drops to return to.", "bookmark", bookmarks >= 3, bookmarks, 3),
+        badge("voice", "A Voice in the Room", "Made your first community post.", "message", posts >= 1, posts, 1),
+        badge("conversationalist", "Conversationalist", "Left 5 comments.", "messages", comments >= 5, comments, 5),
+        badge("win_sharer", "Win Sharer", "Posted a win in the weekly thread.", "trophy", wins >= 1, wins, 1),
+        badge("witness", "The Witness", "Submitted a testimony.", "sparkles", testimonials >= 1, testimonials, 1),
+        badge("multiplier", "Multiplier", "Brought another sovereign through your link.", "users", referrals >= 1, referrals, 1),
+        badge("week_one", "Week One", "7 days as a member.", "calendar", days_member >= 7, days_member, 7),
+        badge("month_one", "Month One", "30 days as a member.", "moon", days_member >= 30, days_member, 30),
+        badge("season", "A Full Season", "90 days holding the posture.", "flame", days_member >= 90, days_member, 90),
+    ]
+    earned = [b for b in badges if b["earned"]]
+    return {"badges": badges, "earned_count": len(earned), "total": len(badges), "days_member": days_member}
+
+
+# ============================================================
+#  CREATOR IDENTITY COURSE — progress persistence (admin)
+# ============================================================
+
+@api.get("/admin/identity-progress")
+async def admin_get_identity_progress(user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    v = await _get_setting("identity_progress") or {}
+    return {"progress": v}
+
+
+@api.patch("/admin/identity-progress")
+async def admin_set_identity_progress(payload: dict, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    await _set_setting("identity_progress", payload or {})
+    return {"progress": payload or {}}
 
 
 # ============================================================

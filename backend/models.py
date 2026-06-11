@@ -210,12 +210,23 @@ class PricingIn(BaseModel):
 class TestimonialIn(BaseModel):
     body: str
     headline: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class TestimonialModerate(BaseModel):
     status: Literal["pending", "approved", "featured", "rejected"]
     headline: Optional[str] = None
     body: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class DominionIn(BaseModel):
+    book_url: Optional[str] = None
+    book_status: Optional[Literal["forthcoming", "available"]] = None
+    audiobook_url: Optional[str] = None
+    audiobook_status: Optional[Literal["forthcoming", "available"]] = None
+    book_note: Optional[str] = None
+    audiobook_note: Optional[str] = None
 
 
 class DropCommentIn(BaseModel):

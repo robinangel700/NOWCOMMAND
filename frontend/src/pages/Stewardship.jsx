@@ -347,16 +347,23 @@ const PROVEN_DM_OPENERS = [
   "Quick thought: if money were a steward, what would change? That's the whole frame inside NOWCOMMAND. Want me to send the link?",
 ];
 const PROVEN_OBJECTIONS = [
-  { o: "I can't afford it right now.", a: "That's exactly the spirit it dismantles. The membership is the same monthly cost as your weekday coffees. The codes you'll receive in week one have generated thousands for members already." },
+  { o: "I can't afford it right now.", a: "That's exactly the spirit it dismantles. The membership is the same monthly cost as your weekday coffees. The codes you'll receive in week one have generated thousands for members already. And if a full seat is too much this month, there's an $11 foundational tier." },
   { o: "I'll think about it.", a: "Totally fair. Worth knowing: the founder $44 rate closes when the doors hit 300 seats. After that it's $77 or waitlist. So the only thing thinking longer costs you is the rate, not the value." },
   { o: "Is this faith-based?", a: "Yes — and unapologetically. It's a steward's table. Mammon and Chronos are spiritual realities. We treat them as such." },
+];
+const PROVEN_FOLLOWUPS = [
+  "No pressure at all — just closing the loop. Doors cap at 300 seats and founder pricing won't last, so I didn't want you to miss the window if it's a yes. Either way, glad you're in my world.",
+  "Hey, one more thought: the thing that finally moved me wasn't the content — it was realizing how long I'd been bowing to 'not enough.' If that sentence lands, the door's still open.",
 ];
 function SalesWizard({ affiliate }) {
   const [step, setStep] = useState(0);
   const [audience, setAudience] = useState("");
-  const STEPS = ["frame", "audience", "hook", "dm", "objections", "drop"];
+  const STEPS = ["frame", "audience", "hook", "dm", "objections", "followup", "drop"];
   const stage = STEPS[step] || "drop";
   const copy = (t) => { navigator.clipboard.writeText(t); toast.success("Copied"); };
+  const milestones = [10000, 50000, 100000];
+  const earned = affiliate?.earnings_cents || 0;
+  const nextMilestone = milestones.find((m) => earned < m) || null;
   return (
     <div className="space-y-6" data-testid="sales-wizard">
       <div className="flex gap-1">
@@ -415,10 +422,26 @@ function SalesWizard({ affiliate }) {
               <div key={i} className="panel p-4">
                 <div className="overline mb-1">// "{o.o}"</div>
                 <p className="text-cream/90">{o.a}</p>
+                <button data-testid={`copy-objection-${i}`} onClick={() => copy(o.a)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/>Copy answer</button>
               </div>
             ))}
           </div>
           <div className="flex gap-3 mt-6"><button onClick={() => setStep(3)} className="btn-ghost">Back</button><button onClick={() => setStep(5)} className="btn-gold">Continue</button></div>
+        </div>
+      )}
+      {stage === "followup" && (
+        <div className="panel p-8">
+          <div className="overline mb-3">// STEP 6 · THE GENTLE SECOND TOUCH</div>
+          <p className="text-textMuted mb-4">Most yeses come on the follow-up, not the first ask. Wait ~48 hours, then send <strong className="text-cream">one</strong> of these. Once. Never chase.</p>
+          <div className="space-y-2">
+            {PROVEN_FOLLOWUPS.map((f, i) => (
+              <div key={i} className="panel p-4">
+                <p className="text-cream/90 leading-relaxed">{f}</p>
+                <button data-testid={`copy-followup-${i}`} onClick={() => copy(`${f}\n\n${affiliate?.link || ""}`)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/>Copy</button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-3 mt-6"><button onClick={() => setStep(4)} className="btn-ghost">Back</button><button onClick={() => setStep(6)} className="btn-gold">Continue</button></div>
         </div>
       )}
       {stage === "drop" && (
@@ -426,6 +449,15 @@ function SalesWizard({ affiliate }) {
           <Check className="w-10 h-10 text-gold mb-4 animate-glow"/>
           <h3 className="font-display text-3xl text-cream">You're armed.</h3>
           <p className="text-textMuted mt-3">Take ONE action right now. Send one DM. Post one hook. The wizard resets when you re-open it.</p>
+          {nextMilestone && (
+            <div className="mt-5 panel p-4" data-testid="affiliate-milestone">
+              <div className="overline mb-2">// NEXT PAYOUT MILESTONE</div>
+              <p className="text-cream/90 text-sm">You're <span className="text-gold font-display text-lg">{fmt.money(nextMilestone - earned)}</span> from reaching {fmt.money(nextMilestone)} in lifetime payouts. One more conversation.</p>
+              <div className="h-1.5 bg-borderGold mt-3 relative overflow-hidden">
+                <div className="absolute inset-y-0 left-0 bg-gold" style={{ width: `${Math.min(100, Math.round((earned / nextMilestone) * 100))}%` }} />
+              </div>
+            </div>
+          )}
           <button onClick={() => setStep(0)} className="btn-ghost mt-6">Start fresh</button>
         </div>
       )}

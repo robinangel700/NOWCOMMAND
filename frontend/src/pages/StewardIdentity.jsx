@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckSquare, Square } from "lucide-react";
+import { api } from "../lib/api";
 
 const LESSONS = [
   { title: "Day 1 · The Throne, Not the Treadmill", body: "You are not earning the influx. You are stewarding it. Today's practice: at the start of your work block, declare out loud, 'This belongs to the Lord. I administer it from rest.' Then sit in silence for 90 seconds before you touch the laptop." },
@@ -13,7 +14,19 @@ const LESSONS = [
 
 export default function StewardIdentity() {
   const [done, setDone] = useState(() => JSON.parse(localStorage.getItem("steward_lessons_done") || "{}"));
-  const toggle = (i) => { const n = { ...done, [i]: !done[i] }; setDone(n); localStorage.setItem("steward_lessons_done", JSON.stringify(n)); };
+  useEffect(() => {
+    api.get("/admin/identity-progress").then((r) => {
+      if (r.data?.progress && Object.keys(r.data.progress).length) {
+        setDone(r.data.progress);
+        localStorage.setItem("steward_lessons_done", JSON.stringify(r.data.progress));
+      }
+    }).catch(() => {});
+  }, []);
+  const toggle = (i) => {
+    const n = { ...done, [i]: !done[i] }; setDone(n);
+    localStorage.setItem("steward_lessons_done", JSON.stringify(n));
+    api.patch("/admin/identity-progress", n).catch(() => {});
+  };
   const completed = Object.values(done).filter(Boolean).length;
   return (
     <div>
