@@ -59,7 +59,7 @@ export default function SetupWizard({ onClose }) {
         {step === 0 && (
           <div>
             <div className="overline mb-3">// STEP 1 / 5</div>
-            <h2 className="font-display text-5xl text-cream leading-tight">Welcome to NOWREALM, {user?.name?.split(" ")[0] || "Sovereign"}.</h2>
+            <h2 className="font-display text-5xl text-cream leading-tight">Welcome to NOWCOMMAND, {user?.name?.split(" ")[0] || "Sovereign"}.</h2>
             <p className="text-textMuted mt-4 text-lg leading-relaxed">You crossed the threshold. The next 60 seconds set the tone for everything. Five quick steps. Then you're free to roam.</p>
             <button data-testid="wizard-next" onClick={next} className="btn-gold mt-8">Begin <ArrowRight className="w-4 h-4"/></button>
           </div>

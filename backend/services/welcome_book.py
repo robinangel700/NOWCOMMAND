@@ -56,7 +56,7 @@ def ensure_pdf(force: bool = False) -> str:
     story = []
     # Cover
     story.append(Spacer(1, 80))
-    story.append(Paragraph("// THE NOWREALM PRESS // VOLUME ONE", over))
+    story.append(Paragraph("// THE NOWCOMMAND PRESS // VOLUME ONE", over))
     story.append(Spacer(1, 30))
     story.append(Paragraph("Dominion Over Mammon", cover_title))
     story.append(Paragraph("&amp; The Spirit of Delay", cover_title))

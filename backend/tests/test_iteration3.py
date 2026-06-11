@@ -1,4 +1,4 @@
-"""NOWREALM Iteration 3 backend tests.
+"""NOWCOMMAND Iteration 3 backend tests.
 
 Covers:
 - Brand (public + admin) settings
@@ -328,14 +328,14 @@ class TestDropAnnouncement:
 class TestProfileIter3:
     def test_cover_position_y_persists(self, full_a):
         r = requests.patch(f"{API}/me/profile",
-                           json={"cover_position_y": 42, "location": "Galilee", "website": "https://nowrealm.test"},
+                           json={"cover_position_y": 42, "location": "Galilee", "website": "https://nowcommand.test"},
                            headers=_bearer(full_a["token"]), timeout=10)
         assert r.status_code == 200, r.text
         pub = requests.get(f"{API}/users/{full_a['id']}/public",
                            headers=_bearer(full_a["token"]), timeout=10).json()["user"]
         assert pub.get("cover_position_y") == 42
         assert pub.get("location") == "Galilee"
-        assert pub.get("website") == "https://nowrealm.test"
+        assert pub.get("website") == "https://nowcommand.test"
         # password must never appear
         assert "password" not in pub and "password_hash" not in pub
 

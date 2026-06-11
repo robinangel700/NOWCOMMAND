@@ -46,7 +46,7 @@ def ensure_pdf(force: bool = False) -> str:
         canv.rect(0.5 * inch, 0.5 * inch, LETTER[0] - 1 * inch, LETTER[1] - 1 * inch, stroke=1, fill=0)
         canv.setFont("Courier", 8)
         canv.setFillColor(gold)
-        canv.drawString(0.9 * inch, 0.65 * inch, "NOWREALM // ROBIN ANGEL")
+        canv.drawString(0.9 * inch, 0.65 * inch, "NOWCOMMAND // ROBIN ANGEL")
         canv.drawRightString(LETTER[0] - 0.9 * inch, 0.65 * inch, f"PAGE {doc_.page}")
         canv.restoreState()
 
@@ -86,7 +86,7 @@ def ensure_pdf(force: bool = False) -> str:
     story.append(PageBreak())
     story.append(Paragraph("WHAT TO DO NEXT", h2))
     story.append(Paragraph(
-        "1. Log into your NOWREALM dashboard.<br/>"
+        "1. Log into your NOWCOMMAND dashboard.<br/>"
         "2. Read the One Page Manifesto in the Community Vault.<br/>"
         "3. Post one sentence in the Weekly Biggest Win thread &mdash; even if your win is just &lsquo;I showed up.&rsquo;<br/>"
         "4. Wait for Wednesday. The drop is already scheduled.",

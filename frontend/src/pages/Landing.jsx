@@ -5,8 +5,8 @@ import { api, fmt } from "../lib/api";
 import Countdown from "../components/Countdown";
 import { useAuth } from "../lib/auth";
 
-const HERO_IMG = "https://images.unsplash.com/flagged/photo-1565241651368-35437ca5563f?crop=entropy&cs=srgb&fm=jpg&q=85&w=2000";
-const TEX = "https://images.unsplash.com/photo-1709377195538-5522ed0f9e10?crop=entropy&cs=srgb&fm=jpg&q=85&w=2000";
+const HERO_IMG = "https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?crop=entropy&cs=srgb&fm=jpg&q=85&w=2000";
+const TEX = "https://images.unsplash.com/photo-1604079628040-94301bb21b91?crop=entropy&cs=srgb&fm=jpg&q=85&w=2000";
 const CLOCK = "https://images.unsplash.com/photo-1518281361980-b26bfd556770?crop=entropy&cs=srgb&fm=jpg&q=85&w=2000";
 
 export default function Landing() {
@@ -21,7 +21,7 @@ export default function Landing() {
     api.get("/public/state").then((r) => setState(r.data));
     api.get("/public/articles").then((r) => setBlog(r.data));
     const ref = params.get("ref");
-    if (ref) localStorage.setItem("nowrealm_ref", ref);
+    if (ref) localStorage.setItem("nowcommand_ref", ref);
   }, [params]);
 
   const submitOptin = async (e) => {
@@ -53,7 +53,7 @@ export default function Landing() {
               Operate in <span className="bg-gold-grad">Kairos</span>.
             </h1>
             <p className="mt-8 text-lg md:text-xl text-textMuted max-w-2xl leading-relaxed">
-              NOWREALM is the private membership where Robin Angel transmits the codes that evict the spirit of delay,
+              NOWCOMMAND is the private membership where Robin Angel transmits the codes that evict the spirit of delay,
               dethrone the spirit of money, and seat you in divine timing. <span className="text-cream">You are not subscribing. You are crossing a threshold.</span>
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-4">
@@ -102,7 +102,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-6 lg:px-10">
           <div className="flex items-end justify-between flex-wrap gap-6 mb-12">
             <div>
-              <div className="overline mb-3">// THE NOWREALM BLOG</div>
+              <div className="overline mb-3">// THE NOWCOMMAND BLOG</div>
               <h2 className="font-display text-4xl md:text-6xl text-cream leading-[1.0]">Read freely. Get warmed up. <br/>Then cross the threshold.</h2>
               <p className="text-textMuted text-lg mt-5 max-w-2xl">Short, sharp essays on money, time, and divine timing. New pieces every week. Subscribe and the next one lands in your inbox.</p>
             </div>

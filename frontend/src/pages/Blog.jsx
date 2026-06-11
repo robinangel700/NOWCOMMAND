@@ -9,7 +9,7 @@ export function BlogIndex() {
   const [email, setEmail] = useState("");
   useEffect(() => {
     api.get("/public/articles").then((r) => setData(r.data));
-    document.title = "NOWREALM — Blog: Money, Time & Divine Timing";
+    document.title = "NOWCOMMAND — Blog: Money, Time & Divine Timing";
   }, []);
   const optin = async (e) => {
     e.preventDefault();
@@ -20,7 +20,7 @@ export function BlogIndex() {
   return (
     <div className="min-h-screen px-6 lg:px-10 py-16">
       <div className="max-w-6xl mx-auto">
-        <div className="overline mb-4">// THE NOWREALM BLOG</div>
+        <div className="overline mb-4">// THE NOWCOMMAND BLOG</div>
         <h1 className="font-display text-5xl md:text-7xl text-cream leading-[1.0]">
           Notes from the <span className="bg-gold-grad">dominion</span> table.
         </h1>
@@ -47,7 +47,7 @@ export function BlogIndex() {
               )}
               <div className="overline mb-3">{a.tags?.[0] || "ESSAY"}</div>
               <h3 className="font-display text-2xl text-cream leading-tight group-hover:text-gold transition-colors">{a.title}</h3>
-              <p className="text-textMuted text-sm mt-3 line-clamp-3">{a.excerpt}</p>
+              <p className="text-textMuted text-sm mt-3" style={{display:"-webkit-box",WebkitLineClamp:3,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{a.excerpt}</p>
               <div className="mt-5 flex items-center justify-between text-xs font-mono text-textDim">
                 <span>{fmt.date(a.published_at)}</span>
                 <span className="flex items-center gap-1"><Eye className="w-3 h-3"/> {a.views || 0}</span>

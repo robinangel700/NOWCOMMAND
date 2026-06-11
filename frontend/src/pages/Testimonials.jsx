@@ -9,7 +9,7 @@ export default function Testimonials() {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [body, setBody] = useState(""); const [headline, setHeadline] = useState("");
-  useEffect(() => { api.get("/public/testimonials").then((r) => setItems(r.data.testimonials)); document.title = "NOWREALM — Testimonies"; }, []);
+  useEffect(() => { api.get("/public/testimonials").then((r) => setItems(r.data.testimonials)); document.title = "NOWCOMMAND — Testimonies"; }, []);
   const submit = async (e) => { e.preventDefault();
     if (!body.trim()) return;
     try { await api.post("/testimonials", { headline, body }); toast.success("Submitted — Robin will review."); setBody(""); setHeadline(""); }
@@ -48,7 +48,7 @@ export default function Testimonials() {
             <h3 className="font-display text-3xl text-cream">Tell us what shifted.</h3>
             <p className="text-textMuted mt-2">Robin reviews submissions before publishing. With your permission, your testimony may appear on this page and on Robin's socials.</p>
             <input data-testid="testimony-headline" value={headline} onChange={(e) => setHeadline(e.target.value)} placeholder="Headline (optional, e.g. 'My first month back in Kairos')" className="mt-5"/>
-            <textarea data-testid="testimony-body" rows={5} value={body} onChange={(e) => setBody(e.target.value)} placeholder="What changed since you stepped into NOWREALM?" className="mt-3"/>
+            <textarea data-testid="testimony-body" rows={5} value={body} onChange={(e) => setBody(e.target.value)} placeholder="What changed since you stepped into NOWCOMMAND?" className="mt-3"/>
             <button data-testid="testimony-submit" type="submit" className="btn-gold mt-4"><Send className="w-4 h-4"/>Submit testimony</button>
           </form>
         ) : (

@@ -204,6 +204,27 @@ async def ensure_indexes():
         log.exception("ensure_indexes failed (continuing)")
 
 
+async def _vault_teaser_sweep():
+    db = get_db()
+    now = datetime.now(timezone.utc)
+    tomorrow_iso = (now + timedelta(days=1)).isoformat()
+    a = await db.articles.find_one({
+        "published": False, "vault": True,
+        "scheduled_for": {"$gte": now.isoformat(), "$lte": tomorrow_iso},
+        "vault_teaser_sent": {"$ne": True},
+    }, sort=[("scheduled_for", 1)])
+    if not a:
+        return
+    try:
+        import email_templates as et
+        subj, html = et.render("vault_teaser", {"title": a["title"], "frontend": os.environ.get("FRONTEND_BASE_URL", "")})
+    except Exception:
+        return
+    async for lead in db.leads.find({}):
+        await send_email(lead["email"], subj, html, kind="vault_teaser")
+    await db.articles.update_one({"id": a["id"]}, {"$set": {"vault_teaser_sent": True, "vault_teaser_at": now_iso()}})
+
+
 async def _loop():
     await ensure_indexes()
     while True:
@@ -213,6 +234,10 @@ async def _loop():
             await _winback_inactive()
             await _ensure_weekly_win_thread()
             await _publish_due_summaries()
+            await _vault_teaser_sweep()
+            now = datetime.now(timezone.utc)
+            if now.hour == 14:
+                await _daily_digest()
         except Exception:
             log.exception("scheduler tick failed")
         await asyncio.sleep(60)

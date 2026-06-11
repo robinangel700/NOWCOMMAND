@@ -6,7 +6,7 @@ export const API = `${BACKEND_URL}/api`;
 export const api = axios.create({ baseURL: API });
 
 api.interceptors.request.use((cfg) => {
-  const t = localStorage.getItem("nowrealm_token");
+  const t = localStorage.getItem("nowcommand_token");
   if (t) cfg.headers.Authorization = `Bearer ${t}`;
   return cfg;
 });

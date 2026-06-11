@@ -1,4 +1,4 @@
-"""NOWREALM end-to-end backend tests (pytest).
+"""NOWCOMMAND end-to-end backend tests (pytest).
 
 Covers: public, auth, subscription dev-mode checkout, downgrade/pause/cancel,
 admin drops + visibility tiers, community, notes/bookmarks/progress, affiliate,

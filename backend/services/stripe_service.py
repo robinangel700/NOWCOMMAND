@@ -51,11 +51,11 @@ def create_or_get_customer(email: str, name: Optional[str], existing_id: Optiona
 def plan_to_price_data(plan: str, current_full_cents: int) -> Tuple[int, str, str]:
     """Returns (unit_amount_cents, interval, description) for stripe price_data."""
     if plan == "full_monthly":
-        return current_full_cents, "month", "NOWREALM Sovereign Membership"
+        return current_full_cents, "month", "NOWCOMMAND Sovereign Membership"
     if plan == "full_annual":
-        return int(os.environ.get("PRICE_FULL_ANNUAL_CENTS", 50000)), "year", "NOWREALM Sovereign Annual"
+        return int(os.environ.get("PRICE_FULL_ANNUAL_CENTS", 50000)), "year", "NOWCOMMAND Sovereign Annual"
     if plan == "foundational_monthly":
-        return int(os.environ.get("PRICE_FOUNDATIONAL_MONTHLY_CENTS", 1100)), "month", "NOWREALM Foundational"
+        return int(os.environ.get("PRICE_FOUNDATIONAL_MONTHLY_CENTS", 1100)), "month", "NOWCOMMAND Foundational"
     raise ValueError(f"Unknown plan {plan}")
 
 

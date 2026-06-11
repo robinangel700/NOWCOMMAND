@@ -8,7 +8,7 @@ export function VaultIndex() {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     api.get("/vault/articles").then((r) => { setArticles(r.data.articles); setLoading(false); }).catch(() => setLoading(false));
-    document.title = "NOWREALM Vault";
+    document.title = "NOWCOMMAND Vault";
   }, []);
   return (
     <div className="min-h-screen px-6 lg:px-10 py-16">

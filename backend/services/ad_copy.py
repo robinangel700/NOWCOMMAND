@@ -20,16 +20,16 @@ HOOKS = [
 
 CTAS_MEMBER = [
     "Open the new drop in your dashboard →",
-    "It just landed inside NOWREALM. Open and apply.",
+    "It just landed inside NOWCOMMAND. Open and apply.",
     "Read it tonight. Apply one line by morning.",
     "Don't scroll past this. Open it.",
 ]
 
 CTAS_FUNNEL = [
-    "Free chapter inside the Tuesday transmission. Subscribe at nowrealm.",
-    "Read the full piece on the NOWREALM blog. Free.",
+    "Free chapter inside the Tuesday transmission. Subscribe at nowcommand.",
+    "Read the full piece on the NOWCOMMAND blog. Free.",
     "300 seats. Then the doors close. Claim yours.",
-    "Cross the threshold. NOWREALM is open for {days} more days at $44.",
+    "Cross the threshold. NOWCOMMAND is open for {days} more days at $44.",
 ]
 
 
@@ -44,7 +44,7 @@ def for_drop(d: Dict, public: bool = False, days_left: int = 21) -> List[Dict]:
     # 1. FB long-form
     out.append({
         "platform": "Facebook (long)",
-        "copy": f"{hooks[0]}\n\n{preview}\n\nThis just dropped inside NOWREALM: \"{title}\".\n\n"
+        "copy": f"{hooks[0]}\n\n{preview}\n\nThis just dropped inside NOWCOMMAND: \"{title}\".\n\n"
                 f"{cta_pool[0].replace('{days}', str(days_left))}",
     })
     # 2. IG short
@@ -52,7 +52,7 @@ def for_drop(d: Dict, public: bool = False, days_left: int = 21) -> List[Dict]:
         "platform": "Instagram (caption)",
         "copy": f"{hooks[1]}\n\n→ \"{title}\"\n\n{preview[:160]}…\n\n"
                 f"{cta_pool[1 % len(cta_pool)].replace('{days}', str(days_left))}\n\n"
-                f"#dominion #kairos #stewardship #nowrealm",
+                f"#dominion #kairos #stewardship #nowcommand",
     })
     # 3. Story
     out.append({
@@ -62,7 +62,7 @@ def for_drop(d: Dict, public: bool = False, days_left: int = 21) -> List[Dict]:
     # 4. Twitter / X
     out.append({
         "platform": "X / Threads",
-        "copy": f"{hooks[3]} \n\n\"{title}\" \u2014 just live inside NOWREALM. {cta_pool[0].replace('{days}', str(days_left))}",
+        "copy": f"{hooks[3]} \n\n\"{title}\" \u2014 just live inside NOWCOMMAND. {cta_pool[0].replace('{days}', str(days_left))}",
     })
     # 5. Email broadcast
     out.append({
@@ -78,9 +78,9 @@ def for_article(a: Dict, public: bool = True) -> List[Dict]:
     excerpt = a.get("excerpt") or (a.get("body_md") or "")[:240]
     hooks = random.sample(HOOKS, k=min(5, len(HOOKS)))
     return [
-        {"platform": "Facebook (long)", "copy": f"{hooks[0]}\n\n{excerpt}\n\nNew on the NOWREALM blog: \"{title}\". Free to read. Link in comments."},
+        {"platform": "Facebook (long)", "copy": f"{hooks[0]}\n\n{excerpt}\n\nNew on the NOWCOMMAND blog: \"{title}\". Free to read. Link in comments."},
         {"platform": "Instagram (caption)", "copy": f"{hooks[1]}\n\n\"{title}\"\n\n{excerpt[:160]}…\n\nFree read on the blog. Link in bio.\n\n#dominion #kairos #stewardship"},
         {"platform": "Story / Reel hook", "copy": f"{hooks[2]}\n\n\"{title}\" \u2014 free on the blog. Tap to read."},
-        {"platform": "X / Threads", "copy": f"{hooks[3]}\n\n\"{title}\" \u2014 free read on the NOWREALM blog. The Tuesday transmission goes deeper."},
-        {"platform": "Email broadcast", "copy": f"Subject: {title}\n\n{hooks[4]}\n\n{excerpt}\n\nRead it free on the NOWREALM blog. The full vault is inside the membership."},
+        {"platform": "X / Threads", "copy": f"{hooks[3]}\n\n\"{title}\" \u2014 free read on the NOWCOMMAND blog. The Tuesday transmission goes deeper."},
+        {"platform": "Email broadcast", "copy": f"Subject: {title}\n\n{hooks[4]}\n\n{excerpt}\n\nRead it free on the NOWCOMMAND blog. The full vault is inside the membership."},
     ]

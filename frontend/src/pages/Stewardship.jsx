@@ -307,7 +307,7 @@ function AffiliatePanel({ affiliate }) {
       <div className="panel p-8 border-gold/50">
         <div className="overline mb-3">// MULTIPLICATION</div>
         <h2 className="font-display text-4xl md:text-5xl text-cream leading-tight">This is stewardship — not selling.</h2>
-        <p className="text-textMuted mt-4 leading-relaxed max-w-3xl">When you bring someone into NOWREALM, you're not earning a commission. You're being trusted with the multiplication of a portion. Half of what they sow returns to you, for life. Steward it accordingly: tithe a slice, reinvest a slice, build a slice.</p>
+        <p className="text-textMuted mt-4 leading-relaxed max-w-3xl">When you bring someone into NOWCOMMAND, you're not earning a commission. You're being trusted with the multiplication of a portion. Half of what they sow returns to you, for life. Steward it accordingly: tithe a slice, reinvest a slice, build a slice.</p>
       </div>
 
       <div className="grid sm:grid-cols-3 gap-px bg-borderGold">
@@ -336,15 +336,15 @@ function AffiliatePanel({ affiliate }) {
 
 /* ------------- Sales Wizard (multi-step, drives sales) ------------- */
 const PROVEN_HOOKS = [
-  "Your morning latte is a routine luxury. NOWREALM is your financial destiny.",
+  "Your morning latte is a routine luxury. NOWCOMMAND is your financial destiny.",
   "Years of stagnation are about to compress into sudden acceleration.",
   "Mammon obeys a steward. Stewards obey Kairos.",
   "$44 to command your own economic atmosphere.",
 ];
 const PROVEN_DM_OPENERS = [
-  "Hey — I saw you posting about [X]. Robin Angel just opened a private membership called NOWREALM that goes directly at the spirit behind that. Want the link?",
+  "Hey — I saw you posting about [X]. Robin Angel just opened a private membership called NOWCOMMAND that goes directly at the spirit behind that. Want the link?",
   "You've been showing up faithfully online. I just stepped into a membership that crystallized something I'd been circling for months. If you're open, here's the door.",
-  "Quick thought: if money were a steward, what would change? That's the whole frame inside NOWREALM. Want me to send the link?",
+  "Quick thought: if money were a steward, what would change? That's the whole frame inside NOWCOMMAND. Want me to send the link?",
 ];
 const PROVEN_OBJECTIONS = [
   { o: "I can't afford it right now.", a: "That's exactly the spirit it dismantles. The membership is the same monthly cost as your weekday coffees. The codes you'll receive in week one have generated thousands for members already." },

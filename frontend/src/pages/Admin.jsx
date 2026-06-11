@@ -5,8 +5,13 @@ import { api, fmt } from "../lib/api";
 import { toast } from "sonner";
 import { MyProfile } from "./Profile";
 
+import HealthDashboard from "./HealthDashboard";
+import StewardIdentity from "./StewardIdentity";
+
 const TABS = [
+  { id: "health", label: "Health", icon: Award },
   { id: "wizard", label: "Launch Wizard", icon: Rocket },
+  { id: "identity", label: "Steward Identity", icon: HandHeart },
   { id: "checklist", label: "Checklist", icon: CheckSquare },
   { id: "drops", label: "Drops", icon: Sparkles },
   { id: "articles", label: "Articles", icon: BookOpen },
@@ -29,7 +34,7 @@ const TABS = [
 
 export default function Admin() {
   const [params, setParams] = useSearchParams();
-  const initial = params.get("tab") || "wizard";
+  const initial = params.get("tab") || "health";
   const [tab, setTab] = useState(initial);
   const switchTab = (id) => { setTab(id); params.set("tab", id); setParams(params); };
   useEffect(() => { if (params.get("tab")) setTab(params.get("tab")); }, [params]);
@@ -50,6 +55,8 @@ export default function Admin() {
           ))}
         </div>
 
+        {tab === "health" && <HealthDashboard />}
+        {tab === "identity" && <StewardIdentity />}
         {tab === "wizard" && <LaunchWizard onJump={switchTab}/>}
         {tab === "checklist" && <Checklist />}
         {tab === "drops" && <Drops />}
@@ -87,7 +94,7 @@ function LaunchWizard({ onJump }) {
   useEffect(() => { load(); }, []);
   const toggle = async (id, done) => { await api.patch(`/admin/checklist/${id}`, { done: !done }); load(); };
   const launch = async () => {
-    if (!window.confirm("Launch NOWREALM now? This starts the 21-day $44 founder window.")) return;
+    if (!window.confirm("Launch NOWCOMMAND now? This starts the 21-day $44 founder window.")) return;
     try { await api.post("/admin/launch"); toast.success("LAUNCHED."); load(); }
     catch { toast.error("Launch failed"); }
   };
@@ -627,7 +634,7 @@ function LaunchPanel() {
   const load = async () => { const s = await api.get("/admin/settings/launch"); setState(s.data.value || {}); };
   useEffect(() => { load(); }, []);
   const launch = async () => {
-    if (!window.confirm("Launch NOWREALM now? Starts the 21-day $44 founder window.")) return;
+    if (!window.confirm("Launch NOWCOMMAND now? Starts the 21-day $44 founder window.")) return;
     try { const r = await api.post("/admin/launch"); toast.success("Launched"); setState({ launched: true, launch_date: r.data.launch_date, promo_days: r.data.promo_days }); } catch { toast.error("Launch failed"); }
   };
   const triggerWB = async () => { await api.post("/admin/trigger-winback"); toast.success("Win-back swept"); };

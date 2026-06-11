@@ -32,7 +32,7 @@ export default function Auth({ mode = "login" }) {
       <div className="w-full max-w-md">
         <div className="flex items-center gap-3 mb-8">
           <Hourglass className="w-5 h-5 text-gold animate-glow" />
-          <div className="overline">// NOWREALM</div>
+          <div className="overline">// NOWCOMMAND</div>
         </div>
         <h1 className="font-display text-5xl text-cream leading-none mb-3">{mode === "login" ? "Re-enter" : "Cross over"}</h1>
         <p className="text-textMuted mb-10">{mode === "login" ? "Sign back into the realm." : "Create your seat. Stripe checkout is the next step."}</p>

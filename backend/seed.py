@@ -71,7 +71,7 @@ async def seed_all():
         "launch": {"launched": False, "launch_date": None, "promo_days": int(os.environ.get("LAUNCH_PROMO_DAYS", 21))},
         "doors": {"open": True, "cap": int(os.environ.get("MEMBERSHIP_CAP", 300))},
         "manifesto": {"body_md": (
-            "# The NOWREALM Manifesto\n\n"
+            "# The NOWCOMMAND Manifesto\n\n"
             "We do not chase money. We assign it.\n\n"
             "We do not negotiate with delay. We evict it.\n\n"
             "We do not wait for the right time. We carry it.\n\n"
@@ -87,7 +87,7 @@ async def seed_all():
         )},
         "kingdom_upsell": {
             "url": "https://KingdomTitleDeed.com",
-            "headline": "The next step beyond NOWREALM",
+            "headline": "The next step beyond NOWCOMMAND",
             "copy": (
                 "Once the codes activate, the next move is the Title Deed. "
                 "KingdomTitleDeed.com is where you go from commanding the increase "

@@ -59,7 +59,7 @@ def wrap_html(title: str, body_html: str, cta_url: Optional[str] = None, cta_lab
     return f"""
     <html><body style="margin:0;padding:0;background:#0A0A0A;color:#F2EFE9;font-family:Outfit,Helvetica,Arial,sans-serif">
       <div style="max-width:600px;margin:0 auto;padding:48px 32px">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.3em;color:#D4AF37;text-transform:uppercase;margin-bottom:24px">NOWREALM // Robin Angel</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:0.3em;color:#D4AF37;text-transform:uppercase;margin-bottom:24px">NOWCOMMAND // Robin Angel</div>
         <h1 style="font-family:'Cormorant Garamond',Georgia,serif;font-size:36px;line-height:1.1;color:#F2EFE9;margin:0 0 24px 0;font-weight:600">{title}</h1>
         <div style="font-size:16px;line-height:1.7;color:#A39F98">{body_html}</div>
         {cta}

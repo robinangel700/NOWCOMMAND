@@ -31,7 +31,7 @@ export default function Shell({ children }) {
         <div className="max-w-7xl mx-auto px-6 lg:px-10 flex items-center justify-between h-16">
           <Link to="/" data-testid="brand-link" className="flex items-center gap-3 group">
             <Hourglass className="w-5 h-5 text-gold group-hover:rotate-180 transition-transform duration-700" />
-            <span className="font-display text-2xl tracking-tight text-cream group-hover:text-gold transition-colors">NOWREALM</span>
+            <span className="font-display text-2xl tracking-tight text-cream group-hover:text-gold transition-colors">NOWCOMMAND</span>
             <span className="hidden md:inline overline text-[10px] tracking-[0.4em] ml-2">// ROBIN ANGEL</span>
           </Link>
 
@@ -100,10 +100,19 @@ export default function Shell({ children }) {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div className="flex items-center gap-3">
             <Hourglass className="w-4 h-4 text-gold" />
-            <span className="font-display text-xl text-cream">NOWREALM</span>
+            <span className="font-display text-xl text-cream">NOWCOMMAND</span>
             <span className="overline text-[10px]">// Robin Angel</span>
           </div>
           <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-textDim">Cast out Mammon. Rule the Increase. Operate in Kairos.</p>
+        </div>
+        <div className="max-w-7xl mx-auto mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[11px] font-mono uppercase tracking-[0.25em] text-textDim">
+          <Link to="/faq" className="hover:text-gold">FAQ</Link>
+          <Link to="/help" className="hover:text-gold">Support</Link>
+          <Link to="/legal/privacy" className="hover:text-gold">Privacy</Link>
+          <Link to="/legal/terms" className="hover:text-gold">Terms</Link>
+          <Link to="/legal/disclaimer" className="hover:text-gold">Disclaimer</Link>
+          <Link to="/legal/cookies" className="hover:text-gold">Cookies</Link>
+          <span className="ml-auto">© Robin Angel LLC</span>
         </div>
       </footer>
     </div>

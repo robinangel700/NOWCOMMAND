@@ -1,4 +1,4 @@
-"""NOWREALM API server."""
+"""NOWCOMMAND API server."""
 import os
 import uuid
 import logging
@@ -32,7 +32,7 @@ from models import (
 from services import email_service, stripe_service, pdf_service, scheduler, welcome_book, ad_copy
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-log = logging.getLogger("nowrealm")
+log = logging.getLogger("nowcommand")
 
 
 # ---------- Lifespan: seed + start scheduler + generate PDF ----------
@@ -43,12 +43,12 @@ async def lifespan(_app: FastAPI):
     pdf_service.ensure_pdf()
     welcome_book.ensure_pdf()
     scheduler.start()
-    log.info("NOWREALM started.")
+    log.info("NOWCOMMAND started.")
     yield
-    log.info("NOWREALM stopping.")
+    log.info("NOWCOMMAND stopping.")
 
 
-app = FastAPI(title="NOWREALM", lifespan=lifespan)
+app = FastAPI(title="NOWCOMMAND", lifespan=lifespan)
 api = APIRouter(prefix="/api")
 
 # ---- Static (PDF downloads) ----
@@ -113,7 +113,7 @@ async def _promo_remaining_seconds() -> Optional[int]:
 
 @api.get("/")
 async def root():
-    return {"app": "NOWREALM", "status": "ok"}
+    return {"app": "NOWCOMMAND", "status": "ok"}
 
 
 @api.get("/public/state")
@@ -150,7 +150,7 @@ async def join_waitlist(body: WaitlistIn):
     })
     await email_service.send_email(
         body.email,
-        "You're on the NOWREALM waitlist",
+        "You're on the NOWCOMMAND waitlist",
         email_service.wrap_html(
             "You're on the list",
             "<p>The vault holds 300 seats. When one opens, you will be the first to know. Hold your posture.</p>",
@@ -195,7 +195,7 @@ async def signup(body: SignupIn):
         if admin and (admin.get("notif_prefs") or {}).get("admin_on_signup", True):
             await email_service.send_email(
                 admin["email"],
-                f"New NOWREALM signup: {user['email']}",
+                f"New NOWCOMMAND signup: {user['email']}",
                 email_service.wrap_html(
                     "Someone just signed up",
                     f"<p>{user.get('name','')} ({user['email']}) just created an account. "
@@ -305,7 +305,7 @@ async def checkout_alacarte(body: AlacarteCheckoutIn, user: dict = Depends(get_c
     result = stripe_service.create_alacarte_checkout(
         customer_id=cust_id,
         amount_cents=int(drop["alacarte_price_cents"]),
-        description=f"NOWREALM: {drop['title']}",
+        description=f"NOWCOMMAND: {drop['title']}",
         success_url=success_url,
         cancel_url=cancel_url,
         metadata=metadata,
@@ -384,7 +384,7 @@ async def checkout_status(session_id: str, user: dict = Depends(get_current_user
                     "frontend": os.environ.get("FRONTEND_BASE_URL", "").rstrip("/"),
                 })
             except Exception:
-                subj = "Welcome to NOWREALM"
+                subj = "Welcome to NOWCOMMAND"
                 html = email_service.wrap_html("Welcome", "<p>Open your dashboard.</p>")
             await email_service.send_email(user["email"], subj, html, kind="onboarding")
             # Admin notification of purchase
@@ -451,7 +451,7 @@ async def billing_cancel(body: CancelIn, user: dict = Depends(get_current_user))
         return {"status": "paused"}
     if body.action == "downgrade":
         amt = int(os.environ.get("PRICE_FOUNDATIONAL_MONTHLY_CENTS", 1100))
-        stripe_service.update_subscription_price(sub_id, amt, "month", "NOWREALM Foundational")
+        stripe_service.update_subscription_price(sub_id, amt, "month", "NOWCOMMAND Foundational")
         await db.users.update_one({"id": user["id"]}, {"$set": {"tier": "foundational", "stripe_plan": "foundational_monthly"}})
         return {"status": "downgraded", "tier": "foundational"}
     if body.action == "cancel":
@@ -532,10 +532,10 @@ async def stripe_webhook(request: Request):
         # Stripe handles smart retries automatically; we just notify member.
         await email_service.send_email(
             user["email"],
-            "Payment hiccup — NOWREALM auto-retry scheduled",
+            "Payment hiccup — NOWCOMMAND auto-retry scheduled",
             email_service.wrap_html(
                 "A small detour, no breach.",
-                "<p>Your last NOWREALM payment didn’t go through. Stripe will retry automatically over the next several days.</p>"
+                "<p>Your last NOWCOMMAND payment didn’t go through. Stripe will retry automatically over the next several days.</p>"
                 "<p>One click below updates your card in 10 seconds.</p>",
                 cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/billing",
                 cta_label="Update card",
@@ -546,10 +546,10 @@ async def stripe_webhook(request: Request):
         # Pre-card expiration / pre-billing reminder
         await email_service.send_email(
             user["email"],
-            "NOWREALM renewal preview",
+            "NOWCOMMAND renewal preview",
             email_service.wrap_html(
                 "Renewal preview",
-                "<p>Your NOWREALM membership will renew shortly. If your card has changed, one click updates it.</p>",
+                "<p>Your NOWCOMMAND membership will renew shortly. If your card has changed, one click updates it.</p>",
                 cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/billing",
                 cta_label="Manage Billing",
             ),
@@ -1314,7 +1314,10 @@ async def capture_lead(body: LeadIn):
     # Fire opt-in welcome email
     try:
         import email_templates
-        subj, html = email_templates.render("lead_optin", {"frontend": os.environ.get("FRONTEND_BASE_URL", "")})
+        subj, html = email_templates.render("lead_optin", {
+            "frontend": os.environ.get("FRONTEND_BASE_URL", ""),
+            "fb_group": os.environ.get("FB_GROUP_URL", "https://www.facebook.com/groups/authorityovermammonandchronos"),
+        })
         await email_service.send_email(email, subj, html, kind="lead_optin")
     except Exception:
         pass
@@ -1538,18 +1541,25 @@ import base64
 
 @api.post("/upload/image")
 async def upload_image(payload: dict, user: dict = Depends(get_current_user)):
-    """Accept a data-URL (data:image/png;base64,...) or raw base64 and save to /app/backend/static/uploads."""
+    """Accept data-URL base64, validate with Pillow, save under /static/uploads."""
     data = payload.get("data") or ""
-    purpose = payload.get("purpose", "misc")  # avatar | cover | drop | testimonial
+    purpose = payload.get("purpose", "misc")
     if not data.startswith("data:"):
         raise HTTPException(400, "Expected data URL")
     try:
         head, b64 = data.split(",", 1)
-        mime = head.split(";")[0].replace("data:", "")
-        ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}.get(mime, "bin")
         raw = base64.b64decode(b64)
-        if len(raw) > 6 * 1024 * 1024:
-            raise HTTPException(413, "Image too large (max 6MB)")
+        if len(raw) > 8 * 1024 * 1024:
+            raise HTTPException(413, "Image too large (max 8MB)")
+        # Magic-byte validation via Pillow
+        from PIL import Image
+        from io import BytesIO
+        img = Image.open(BytesIO(raw))
+        img.verify()
+        fmt = (img.format or "").lower()
+        if fmt not in ("png", "jpeg", "webp", "gif"):
+            raise HTTPException(400, f"Unsupported image format: {fmt}")
+        ext = {"jpeg": "jpg"}.get(fmt, fmt)
         fname = f"{user['id'][:8]}_{purpose}_{uuid.uuid4().hex[:10]}.{ext}"
         out_dir = ROOT_DIR / "static" / "uploads"
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1566,7 +1576,7 @@ async def upload_image(payload: dict, user: dict = Depends(get_current_user)):
 #  BRAND + PRICING SETTINGS (admin-editable, applied site-wide)
 # ============================================================
 DEFAULT_BRAND = {
-    "site_name": "NOWREALM",
+    "site_name": "NOWCOMMAND",
     "tagline": "Cast out Mammon. Rule the Increase. Operate in Kairos.",
     "primary_hex": "#D4AF37",
     "primary_hi_hex": "#E5C158",
@@ -1700,6 +1710,8 @@ async def admin_convert_win_to_testimonial(post_id: str, user: dict = Depends(ge
     p = await db.posts.find_one({"id": post_id})
     if not p:
         raise HTTPException(404, "Post not found")
+    if p.get("kind") != "win":
+        raise HTTPException(400, "Only 'win' posts can be converted to testimonials")
     existing = await db.testimonials.find_one({"source_post_id": post_id})
     if existing:
         return {"status": "already_seeded", "id": existing["id"]}
@@ -1806,6 +1818,13 @@ async def dm_send(body: DMSendIn, user: dict = Depends(get_current_user)):
     db = get_db()
     if body.recipient_id == user["id"]:
         raise HTTPException(400, "Cannot DM yourself")
+    if len(body.body) > 4000:
+        raise HTTPException(413, "Message too long (max 4000 chars)")
+    # Rate limit: max 20 messages per 60 seconds per sender
+    since = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+    recent = await db.dm_messages.count_documents({"sender_id": user["id"], "created_at": {"$gte": since}})
+    if recent >= 20:
+        raise HTTPException(429, "Slow down — too many messages in the last minute.")
     recipient = await db.users.find_one({"id": body.recipient_id})
     if not recipient:
         raise HTTPException(404, "Recipient not found")
@@ -1853,7 +1872,10 @@ async def dm_threads(user: dict = Depends(get_current_user)):
 async def dm_thread(user_id: str, user: dict = Depends(get_current_user)):
     if not _is_member_or_admin(user):
         raise HTTPException(403, "Members only")
+    if user_id == user["id"]:
+        raise HTTPException(400, "Self-thread not allowed")
     db = get_db()
+    # IDOR guard: ensure requester is one of the thread participants by deriving key
     tk = _thread_key(user["id"], user_id)
     msgs = await db.dm_messages.find({"thread_key": tk}, {"_id": 0}).sort("created_at", 1).to_list(1000)
     # Mark recipient-side as read
@@ -1939,6 +1961,242 @@ async def admin_regen_welcome_book(user: dict = Depends(get_current_user)):
     path = welcome_book.ensure_pdf(force=True)
     return {"path": path}
 
+
+# ============================================================
+#  SEO / SITEMAP / ROBOTS
+# ============================================================
+from fastapi.responses import PlainTextResponse, Response
+
+@api.get("/sitemap.xml", response_class=Response)
+async def sitemap():
+    db = get_db()
+    fe = os.environ.get("FRONTEND_BASE_URL", "").rstrip("/")
+    urls = [f"{fe}/", f"{fe}/pricing", f"{fe}/about", f"{fe}/blog", f"{fe}/testimonials", f"{fe}/legal/privacy", f"{fe}/legal/terms", f"{fe}/legal/disclaimer", f"{fe}/faq"]
+    async for a in db.articles.find({"published": True, "vault": False}, {"slug": 1, "_id": 0, "published_at": 1}):
+        urls.append(f"{fe}/blog/{a['slug']}")
+    body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    for u in urls:
+        body += f"<url><loc>{u}</loc></url>"
+    body += "</urlset>"
+    return Response(content=body, media_type="application/xml")
+
+
+@api.get("/robots.txt", response_class=PlainTextResponse)
+async def robots():
+    fe = os.environ.get("FRONTEND_BASE_URL", "").rstrip("/")
+    return f"User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /dashboard\nDisallow: /stewardship\nDisallow: /vault\nSitemap: {fe}/api/sitemap.xml\n"
+
+
+# ============================================================
+#  HEALTH DASHBOARD (MRR, churn, engagement, alerts)
+# ============================================================
+
+@api.get("/admin/health")
+async def admin_health(user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    now = datetime.now(timezone.utc)
+    last30 = (now - timedelta(days=30)).isoformat()
+    last7 = (now - timedelta(days=7)).isoformat()
+
+    active_full = await db.users.count_documents({"tier": "full"})
+    active_found = await db.users.count_documents({"tier": "foundational"})
+    canceled30 = await db.users.count_documents({"tier": "canceled", "canceled_at": {"$gte": last30}})
+    new30 = await db.users.count_documents({"role": "member", "created_at": {"$gte": last30}})
+    paid30 = await db.payment_transactions.count_documents({"type": "subscription", "payment_status": "paid", "created_at": {"$gte": last30}})
+    pricing = await _get_setting("pricing_overrides") or {}
+    full_cents = pricing.get("full_monthly_cents", int(os.environ.get("PRICE_FULL_MONTHLY_CENTS", 4400)))
+    found_cents = pricing.get("foundational_monthly_cents", int(os.environ.get("PRICE_FOUNDATIONAL_MONTHLY_CENTS", 1100)))
+    mrr_cents = active_full * full_cents + active_found * found_cents
+    active_base = active_full + active_found + canceled30
+    churn_pct = round((canceled30 / active_base * 100), 1) if active_base else 0.0
+
+    inactive_14 = await db.users.count_documents({"tier": {"$in": ["full", "foundational"]}, "last_login": {"$lt": (now - timedelta(days=14)).isoformat()}})
+    posts7 = await db.posts.count_documents({"deleted": {"$ne": True}, "created_at": {"$gte": last7}})
+    failed_payments = await db.payment_transactions.count_documents({"payment_status": "failed"})
+    pending_testimonials = await db.testimonials.count_documents({"status": "pending"})
+    drops_scheduled = await db.drops.count_documents({"published": False, "scheduled_for": {"$ne": None}})
+    articles_scheduled = await db.articles.count_documents({"published": False, "scheduled_for": {"$ne": None}})
+    cap = (await _get_setting("doors") or {}).get("cap", 300)
+    seats_left = cap - (active_full + active_found)
+
+    alerts = []
+    if churn_pct > 5: alerts.append({"level": "warn", "msg": f"Churn at {churn_pct}% (30d) — open Steward of Stewards and personally reach out to last 5 cancellers."})
+    if inactive_14 > 0: alerts.append({"level": "info", "msg": f"{inactive_14} member(s) inactive 14+ days — the win-back scheduler is handling them. Consider a personal DM to the top 3."})
+    if failed_payments > 0: alerts.append({"level": "warn", "msg": f"{failed_payments} failed payment(s) on file — Stripe is auto-retrying. Review in /admin?tab=members."})
+    if pending_testimonials >= 3: alerts.append({"level": "info", "msg": f"{pending_testimonials} testimonials waiting — approve in /admin?tab=testimonials."})
+    if drops_scheduled == 0: alerts.append({"level": "warn", "msg": "No drops scheduled — Wednesday's transmission needs to be queued."})
+    if seats_left <= 30 and seats_left > 0: alerts.append({"level": "info", "msg": f"Only {seats_left} seats left before doors close — raise the price?"})
+    if seats_left <= 0: alerts.append({"level": "info", "msg": "Doors are closed. Time to raise the price and open a waitlist phase."})
+    if not alerts: alerts.append({"level": "good", "msg": "All systems healthy. Stay in praise. Keep dropping."})
+
+    return {
+        "active_full": active_full, "active_foundational": active_found,
+        "canceled_30d": canceled30, "churn_pct_30d": churn_pct,
+        "new_30d": new30, "paid_30d": paid30,
+        "mrr_cents": mrr_cents, "arr_cents": mrr_cents * 12,
+        "seats_left": seats_left, "cap": cap,
+        "inactive_14d": inactive_14, "posts_7d": posts7,
+        "failed_payments": failed_payments,
+        "pending_testimonials": pending_testimonials,
+        "drops_scheduled": drops_scheduled, "articles_scheduled": articles_scheduled,
+        "alerts": alerts,
+    }
+
+
+# ============================================================
+#  PUBLIC CONTENT: FAQ + LEGAL
+# ============================================================
+
+@api.get("/public/faq")
+async def public_faq():
+    return {"sections": [
+        {"title": "Access & Onboarding", "qa": [
+            {"q": "How do I access my membership after paying?", "a": "You're redirected automatically to /checkout/success the moment Stripe confirms payment. From there you can download the Mammon Breaker Activation Codes PDF and the Dominion Over Mammon welcome book, and the Setup Wizard walks you through the first 60 seconds."},
+            {"q": "Where do I download the Activation Codes / Welcome Book?", "a": "Dashboard top-right has both download buttons. They're also emailed to you in the onboarding email."},
+            {"q": "I didn't get my welcome email.", "a": "Check spam. Add robinangel700@gmail.com to your contacts. You can still download both PDFs from your dashboard right now."},
+            {"q": "What happens every Wednesday?", "a": "A new drop auto-publishes to your dashboard and a gold-banner post lands in the community. You'll be emailed too — unless you turn that off in your notification preferences."},
+        ]},
+        {"title": "Billing & Money", "qa": [
+            {"q": "How does billing work?", "a": "Stripe auto-renews monthly or annually. You can update your card in the Stripe portal from /stewardship at any time. Stripe also handles smart-retry if a payment fails."},
+            {"q": "What's your refund policy?", "a": "All purchases are final and non-refundable. By subscribing you acknowledge you've reviewed the Terms and the no-refund policy. If you need to step away, use the Pause feature inside /stewardship."},
+            {"q": "Can I pause my membership?", "a": "Yes — /stewardship → Review options → Pause. Your seat is held, billing stops, and you resume in one click."},
+            {"q": "Can I cancel?", "a": "Yes — same flow. The cancel funnel will offer you softer landings (pause, $11 foundational tier) before final cancel. All custom data is wiped on final cancel per the terms."},
+            {"q": "What's the $11 foundational tier?", "a": "A softer-landing tier that appears inside the cancel flow. Foundational members keep the activation PDF, the welcome book, foundational drops, and their notes — but lose community + premium drops. You can return to Sovereign anytime."},
+        ]},
+        {"title": "Content & Community", "qa": [
+            {"q": "Where is the One Page Manifesto?", "a": "Pinned in the community sidebar at /community and also at /about."},
+            {"q": "How do I post in the community?", "a": "Sovereign members can post and comment at /community. Foundational tier is read-only."},
+            {"q": "Can I DM another member?", "a": "Yes. Visit their profile and click Message. Rate-limited to 20 messages/minute to protect everyone."},
+            {"q": "How do I share a win?", "a": "Post in the Weekly Biggest Win thread or submit a testimony at /testimonials. Robin reviews submissions before publishing."},
+        ]},
+        {"title": "Affiliate (Multiplication)", "qa": [
+            {"q": "How does affiliate work?", "a": "Share your link from /stewardship → Multiply. You earn 50% of every payment from anyone who joins through you — for life."},
+            {"q": "When do I get paid?", "a": "Affiliate earnings are tracked in real time. Robin issues payouts via Stripe at her discretion based on her stated payout schedule. Contact via the support flow if you have questions about a specific payout."},
+            {"q": "Where's the Sales Wizard?", "a": "/stewardship → Sales Wizard. 6-step weekly playbook with hooks, DM scripts, objection handling."},
+        ]},
+        {"title": "Privacy & Security", "qa": [
+            {"q": "Is my data safe?", "a": "Your account is protected by JWT auth + bcrypt password hashing. Payments are processed by Stripe (PCI-compliant) — we never see your card. See /legal/privacy for full details."},
+            {"q": "Can I delete my account?", "a": "Yes. Cancel from /stewardship and all custom data is removed automatically."},
+        ]},
+        {"title": "Still need help?", "qa": [
+            {"q": "I went through everything and still need help.", "a": "Email Robin directly at robinangel700@gmail.com. Robin reads every message but responds in batches — expect a reply within 3 business days. The community at /community is the fastest path for most questions."},
+        ]},
+    ]}
+
+
+@api.get("/public/legal/{doc}")
+async def public_legal(doc: str):
+    company = os.environ.get("COMPANY_LEGAL_NAME", "Robin Angel LLC")
+    site = os.environ.get("BRAND_SITE_NAME", "NOWCOMMAND")
+    domain = os.environ.get("BRAND_SITE_DOMAIN", "nowcommand.com")
+    email = os.environ.get("ADMIN_EMAIL", "robinangel700@gmail.com")
+    docs = {
+        "privacy": {
+            "title": "Privacy Policy",
+            "updated": "2026-06-11",
+            "body_md": f"""**{company}** operates {site} ({domain}). This Privacy Policy explains what data we collect, why, and how we protect it.
+
+## What we collect
+- **Account data**: email, name, password hash (bcrypt). We never see your plain-text password.
+- **Profile**: avatar, cover image, bio, location, website — entirely optional.
+- **Activity**: drops read, notes saved, bookmarks, quiz attempts, community posts, last-login timestamp. Used to personalize the dashboard, drive the win-back system, and produce the daily digest.
+- **Payment data**: handled exclusively by Stripe. We store your Stripe customer/subscription IDs and the last four digits of the card via Stripe — we never store full card numbers.
+- **Leads**: if you opt into the blog, we store your email + source page.
+
+## How we use it
+- Deliver the service (drops, community, billing, downloads).
+- Send transactional and marketing emails via Resend. You can opt out from /profile preferences.
+- Improve content and operations. We do not sell your data, ever.
+
+## Cookies & local storage
+We store a JWT auth token in your browser's localStorage to keep you signed in. No third-party tracking cookies.
+
+## Your rights
+- Export: email {email} to request a copy of your data.
+- Delete: cancel your membership from /stewardship — your custom data is removed automatically. Or email {email}.
+
+## Third-party processors
+Stripe (payments), Resend (email delivery), MongoDB Atlas (database). Each is bound by their own privacy policies.
+
+## Contact
+{company} · {email}
+"""
+        },
+        "terms": {
+            "title": "Terms of Service",
+            "updated": "2026-06-11",
+            "body_md": f"""These Terms govern your use of {site} ({domain}), operated by {company}.
+
+## 1. Acceptance
+By creating an account or purchasing a subscription, you agree to these Terms in full.
+
+## 2. Eligibility
+You must be at least 18 years old and capable of forming a binding contract.
+
+## 3. Membership tiers & pricing
+{site} offers a Sovereign membership at $44/month or $500/year (founder pricing during the first 21 days of launch; $77/month thereafter). A Foundational tier at $11/month is available as a downgrade option only. All prices are in USD.
+
+## 4. Auto-renewal
+Subscriptions auto-renew until canceled. You may cancel, pause, or downgrade at any time from /stewardship. Cancellation takes effect at the end of your current billing period unless otherwise stated.
+
+## 5. No refunds
+**All purchases are final and non-refundable.** By purchasing you acknowledge you've reviewed the membership description, the Mammon Breaker preview, and the testimonials, and have made an informed decision. If circumstances change, you may pause or downgrade — but no refunds will be issued. This includes annual subscriptions.
+
+## 6. Content & spiritual context
+{site} is a faith-based, Christian membership. Content references scripture, prayer, prophetic concepts, and spiritual realities (Mammon, Chronos, Kairos). It is not a substitute for financial, medical, legal, or mental-health advice. You assume full responsibility for any decisions you make based on the content.
+
+## 7. No financial guarantees
+{site} does not promise specific financial outcomes. Testimonials are individual experiences and not representative of typical results.
+
+## 8. Conduct
+You agree not to harass, dox, spam, or sell to other members. Robin reserves the right to remove any member at any time without refund for violation of community rules. No screen-recording, no sharing of paid content outside the membership.
+
+## 9. Intellectual property
+All content (drops, articles, manifesto, PDFs, audio, video) is the property of {company} and licensed to you for personal, non-commercial use during your active membership. On cancellation, your license terminates.
+
+## 10. Affiliate program
+The 50% lifetime affiliate payout is honored at {company}'s discretion based on the published schedule. Self-referrals, refund-fraud, and abusive patterns void the affiliate account.
+
+## 11. Limitation of liability
+To the maximum extent permitted by law, {company}'s total liability is capped at the amount you paid in the 12 months preceding the claim.
+
+## 12. Governing law
+These Terms are governed by the laws of the State in which {company} is registered. Any disputes shall be resolved in that jurisdiction.
+
+## 13. Changes
+We may update these Terms. Continued use after an update constitutes acceptance.
+
+## Contact
+{company} · {email}
+"""
+        },
+        "disclaimer": {
+            "title": "Disclaimer",
+            "updated": "2026-06-11",
+            "body_md": f"""{site} provides spiritual, educational, and motivational content from a Christian perspective. We are not financial advisors, attorneys, accountants, doctors, or licensed therapists.
+
+Nothing on this site constitutes financial, legal, tax, medical, or psychological advice. All decisions you make based on content from {site} are your own responsibility. {company} expressly disclaims any and all liability for outcomes resulting from action or inaction based on our content.
+
+Testimonials are individual experiences and not guarantees. Past results do not predict future outcomes.
+"""
+        },
+        "cookies": {
+            "title": "Cookie & Local Storage Policy",
+            "updated": "2026-06-11",
+            "body_md": f"""{site} uses minimal browser storage:
+
+- **Auth token**: stored in localStorage to keep you signed in. Cleared when you log out.
+- **Affiliate referral code**: stored in localStorage if you arrive via someone's affiliate link.
+
+We do not use third-party advertising or tracking cookies. Stripe sets its own session cookies on its checkout pages — see Stripe's cookie policy for details.
+"""
+        },
+    }
+    d = docs.get(doc)
+    if not d:
+        raise HTTPException(404, "Legal doc not found")
+    return d
 
 # ---------- mount and CORS ----------
 app.include_router(api)

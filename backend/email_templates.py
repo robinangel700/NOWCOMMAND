@@ -11,10 +11,10 @@ def _onboarding(ctx: Dict) -> Tuple[str, str]:
     fe = ctx.get("frontend", "")
     name = (ctx.get("name") or "Sovereign").split(" ")[0]
     return (
-        "Welcome to NOWREALM — your Activation Codes are inside",
+        "Welcome to NOWCOMMAND — your Activation Codes are inside",
         wrap_html(
             f"You crossed the threshold, {name}.",
-            "<p>Your seat in NOWREALM is active. <strong>The Mammon Breaker Activation Codes</strong> is attached to this email and also waiting in your dashboard.</p>"
+            "<p>Your seat in NOWCOMMAND is active. <strong>The Mammon Breaker Activation Codes</strong> is attached to this email and also waiting in your dashboard.</p>"
             "<p><strong>What to do in the next 24 hours:</strong></p>"
             "<ol style='line-height:1.9'>"
             "<li>Download and read the Activation Codes once tonight.</li>"
@@ -42,7 +42,7 @@ def _winback(ctx: Dict) -> Tuple[str, str]:
             "and write one sentence in the Weekly Win thread. That single act re-anchors the codes.</p>"
             "<p>Don't let Chronos eat your momentum. Kairos is still holding the door.</p>",
             cta_url=f"{fe}/dashboard",
-            cta_label="Re-enter NOWREALM",
+            cta_label="Re-enter NOWCOMMAND",
         ),
     )
 
@@ -50,10 +50,10 @@ def _winback(ctx: Dict) -> Tuple[str, str]:
 def _payment_failed(ctx: Dict) -> Tuple[str, str]:
     fe = ctx.get("frontend", "")
     return (
-        "Payment hiccup — NOWREALM auto-retry scheduled",
+        "Payment hiccup — NOWCOMMAND auto-retry scheduled",
         wrap_html(
             "A small detour, no breach.",
-            "<p>Your last NOWREALM payment didn't go through. Stripe will retry automatically over the next several days.</p>"
+            "<p>Your last NOWCOMMAND payment didn't go through. Stripe will retry automatically over the next several days.</p>"
             "<p>One click below updates your card in 10 seconds. Your seat is safe.</p>",
             cta_url=f"{fe}/billing",
             cta_label="Update card",
@@ -64,10 +64,10 @@ def _payment_failed(ctx: Dict) -> Tuple[str, str]:
 def _invoice_upcoming(ctx: Dict) -> Tuple[str, str]:
     fe = ctx.get("frontend", "")
     return (
-        "NOWREALM renewal preview",
+        "NOWCOMMAND renewal preview",
         wrap_html(
             "Your seat is renewing",
-            "<p>Your NOWREALM membership will renew shortly. If your card has changed or expires soon, one click below updates it.</p>"
+            "<p>Your NOWCOMMAND membership will renew shortly. If your card has changed or expires soon, one click below updates it.</p>"
             "<p>No action needed if everything's current.</p>",
             cta_url=f"{fe}/billing",
             cta_label="Manage Billing",
@@ -78,7 +78,7 @@ def _invoice_upcoming(ctx: Dict) -> Tuple[str, str]:
 def _drop_published(ctx: Dict) -> Tuple[str, str]:
     fe = ctx.get("frontend", "")
     title = ctx.get("title", "A new transmission")
-    preview = ctx.get("preview", "A new transmission just landed in your NOWREALM dashboard.")
+    preview = ctx.get("preview", "A new transmission just landed in your NOWCOMMAND dashboard.")
     return (
         f"NEW DROP: {title}",
         wrap_html(
@@ -127,7 +127,7 @@ def _monthly_summary(ctx: Dict) -> Tuple[str, str]:
     matters = "".join(f"<li>{m}</li>" for m in ctx.get("matters", []))
     ignore = "".join(f"<li>{i}</li>" for i in ctx.get("ignore", []))
     return (
-        "NOWREALM — Executive Summary",
+        "NOWCOMMAND — Executive Summary",
         wrap_html(
             "Monthly Executive Summary",
             f"<h3 style='color:#D4AF37;font-family:Cormorant Garamond,serif'>What matters right now</h3><ul>{matters}</ul>"
@@ -142,7 +142,7 @@ def _monthly_summary(ctx: Dict) -> Tuple[str, str]:
 
 def _waitlist(ctx: Dict) -> Tuple[str, str]:
     return (
-        "You're on the NOWREALM waitlist",
+        "You're on the NOWCOMMAND waitlist",
         wrap_html(
             "You're on the list",
             "<p>The vault holds 300 seats. When one opens, you'll be the first to know.</p>"
@@ -153,13 +153,20 @@ def _waitlist(ctx: Dict) -> Tuple[str, str]:
 
 def _lead_optin(ctx: Dict) -> Tuple[str, str]:
     fe = ctx.get("frontend", "")
+    fb = ctx.get("fb_group", "https://www.facebook.com/groups/authorityovermammonandchronos")
     return (
-        "Welcome to the NOWREALM list — your first transmission",
+        "Welcome to the NOWCOMMAND list — your first transmission",
         wrap_html(
             "Welcome to the list",
-            "<p>You just put your name on the wall.</p>"
-            "<p>Every Tuesday I send one short, sharp piece of writing about money, time, and divine timing. Read it. Apply one line. Watch what shifts.</p>"
-            "<p>If you ever want the full Vault, the door is at the link below.</p>",
+            "<p>You just put your name on the wall. Here's what happens next, in order:</p>"
+            "<p><strong>1.</strong> Every Tuesday I send one short, sharp piece on money, time & divine timing. Read it. Apply one line. Watch what shifts.</p>"
+            f"<p><strong>2.</strong> Join the free Facebook group — that's where the daily heat is. Daily transmissions, real-time wins, and stewards in motion: "
+            f"<a href='{fb}' style='color:#D4AF37'>Authority Over Mammon &amp; Chronos →</a></p>"
+            "<p><strong>3.</strong> When you're ready to actually <em>operate</em> from these codes (not just consume them), the membership is the door. Founder pricing closes when the seats fill — and they will.</p>"
+            "<blockquote style='border-left:3px solid #D4AF37;padding-left:16px;color:#A39F98;margin:24px 0'>"
+            "The Tuesday transmission is the <em>doorway</em>. The Facebook group is the <em>street outside</em>. The membership is the <em>house</em>. "
+            "If you've been circling money breakthrough for years and watching others walk in — the difference isn't intelligence. It's enrollment.</blockquote>"
+            "<p>Read the next email when it lands. Join the group tonight. Decide on the house when Kairos says so.</p>",
             cta_url=f"{fe}/pricing",
             cta_label="See the membership",
         ),
@@ -198,7 +205,7 @@ def _alacarte_purchased(ctx: Dict) -> Tuple[str, str]:
 def _cancel_confirmation(ctx: Dict) -> Tuple[str, str]:
     fe = ctx.get("frontend", "")
     return (
-        "Your NOWREALM seat has been released",
+        "Your NOWCOMMAND seat has been released",
         wrap_html(
             "You stepped out of the realm",
             "<p>Your subscription is canceled. Your notes, bookmarks, downloads, and community access have been removed per the terms you agreed to.</p>"

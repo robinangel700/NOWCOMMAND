@@ -20,6 +20,8 @@ import { VaultIndex, VaultArticle } from "@/pages/Vault";
 import { MyProfile, PublicProfile } from "@/pages/Profile";
 import { DMInbox, DMThread } from "@/pages/Messages";
 import Testimonials from "@/pages/Testimonials";
+import { LegalPage, FAQPage } from "@/pages/Static";
+import Help from "@/pages/Help";
 import "@/App.css";
 
 function Protected({ children, adminOnly = false, memberOnly = false }) {
@@ -78,6 +80,9 @@ function App() {
             <Route path="/dm" element={<Protected memberOnly><DMInbox /></Protected>} />
             <Route path="/dm/:id" element={<Protected memberOnly><DMThread /></Protected>} />
             <Route path="/testimonials" element={<Testimonials />} />
+            <Route path="/faq" element={<FAQPage />} />
+            <Route path="/help" element={<Help />} />
+            <Route path="/legal/:doc" element={<LegalPage />} />
             <Route path="/profile" element={<Protected><MyProfile /></Protected>} />
             <Route path="/u/:id" element={<Protected memberOnly><PublicProfile /></Protected>} />
             <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
