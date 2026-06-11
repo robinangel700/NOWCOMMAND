@@ -7,14 +7,14 @@
 body {
   margin: 0;
   font-family: "Outfit", system-ui, sans-serif;
-  background: #0a0a0a;
-  color: #f2efe9;
+  background: var(--brand-void, #0a0a0a);
+  color: var(--brand-cream, #f2efe9);
   -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: #d4af37;
-  color: #0a0a0a;
+  background: var(--brand-gold, #d4af37);
+  color: var(--brand-void, #0a0a0a);
 }
 
 @layer base {

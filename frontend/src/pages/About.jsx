@@ -21,7 +21,7 @@ We do not wait for the right time. We carry it.
 
 We rule over the increase. We operate in Kairos. We rest as sovereigns.
 
-\u2014 Robin Angel`}</pre>
+— Robin Angel`}</pre>
       </div>
     </div>
   );

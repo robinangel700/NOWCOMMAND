@@ -67,11 +67,11 @@ export default function Community() {
         <aside className="lg:col-span-4 space-y-6">
           <div className="panel p-6">
             <div className="overline mb-3">// THE MANIFESTO</div>
-            <pre className="whitespace-pre-wrap font-display text-xl text-cream leading-snug">{feed.manifesto?.body_md || "Manifesto pending\u2026"}</pre>
+            <pre className="whitespace-pre-wrap font-display text-xl text-cream leading-snug">{feed.manifesto?.body_md || "Manifesto pending…"}</pre>
           </div>
           <div className="panel p-6">
             <div className="overline mb-3">// HOUSE RULES</div>
-            <pre className="whitespace-pre-wrap text-sm text-textMuted leading-relaxed">{feed.rules?.body_md || "Rules pending\u2026"}</pre>
+            <pre className="whitespace-pre-wrap text-sm text-textMuted leading-relaxed">{feed.rules?.body_md || "Rules pending…"}</pre>
           </div>
         </aside>
 
@@ -80,7 +80,7 @@ export default function Community() {
           <h1 className="font-display text-4xl text-cream mb-6">The Sovereign Vault</h1>
 
           <form onSubmit={post} className="panel p-5 mb-8" data-testid="new-post-form">
-            <textarea data-testid="new-post-body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Share a win, ask a question, drop a code\u2026" />
+            <textarea data-testid="new-post-body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Share a win, ask a question, drop a code…" />
             <div className="mt-3 flex items-center gap-3">
               <label className="text-xs font-mono uppercase tracking-[0.2em] text-textMuted flex items-center gap-2">
                 <input type="checkbox" checked={kind === "win"} onChange={(e) => setKind(e.target.checked ? "win" : "regular")} className="!w-4 !h-4" style={{width:16,height:16}}/>
@@ -92,7 +92,13 @@ export default function Community() {
 
           <div className="space-y-4">
             {feed.posts.map((p) => (
-              <div key={p.id} data-testid={`post-${p.id}`} className="panel p-6">
+              <div key={p.id} data-testid={`post-${p.id}`} className={`panel p-6 ${p.gold_banner ? "border-gold/60" : ""}`}>
+                {p.gold_banner && (
+                  <div className="-m-6 mb-4 px-6 py-2 bg-gold text-void font-mono text-xs tracking-[0.3em] uppercase flex items-center justify-between">
+                    <span>// NEW DROP · {p.drop_title}</span>
+                    {p.drop_id && <Link to={`/drops/${p.drop_id}`} className="hover:underline">Open →</Link>}
+                  </div>
+                )}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 bg-borderGold flex items-center justify-center font-display text-gold">{(p.user_name || "?")[0]?.toUpperCase()}</div>
@@ -129,7 +135,7 @@ export default function Community() {
                       </div>
                     ))}
                     <div className="flex gap-2 pt-2">
-                      <input data-testid={`comment-input-${p.id}`} value={commentBodies[p.id] || ""} onChange={(e) => setCommentBodies({ ...commentBodies, [p.id]: e.target.value })} placeholder="Add a comment\u2026" />
+                      <input data-testid={`comment-input-${p.id}`} value={commentBodies[p.id] || ""} onChange={(e) => setCommentBodies({ ...commentBodies, [p.id]: e.target.value })} placeholder="Add a comment…" />
                       <button data-testid={`comment-submit-${p.id}`} onClick={() => submitComment(p.id)} className="btn-gold !py-2 !px-4 text-xs">Send</button>
                     </div>
                   </div>

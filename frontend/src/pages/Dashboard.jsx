@@ -76,6 +76,16 @@ export default function Dashboard() {
           <button data-testid="dashboard-download" onClick={downloadPDF} className="btn-gold">
             <Download className="w-4 h-4" /> Activation Codes
           </button>
+          <button data-testid="dashboard-book" onClick={async () => {
+            try {
+              const resp = await api.get("/downloads/welcome_book", { responseType: "blob" });
+              const url = window.URL.createObjectURL(new Blob([resp.data], { type: "application/pdf" }));
+              const a = document.createElement("a"); a.href = url; a.download = "Dominion_Over_Mammon.pdf"; a.click(); window.URL.revokeObjectURL(url);
+              toast.success("Book downloaded");
+            } catch { toast.error("Could not download"); }
+          }} className="btn-ghost">
+            <Download className="w-4 h-4" /> Welcome Book
+          </button>
         </div>
 
         {/* Stats grid */}
@@ -160,7 +170,7 @@ export default function Dashboard() {
                       <Lock className="w-4 h-4 text-gold shrink-0 mt-1" />
                       <div>
                         <Link to={`/drops/${d.id}`} className="font-display text-lg text-cream hover:text-gold">{d.title}</Link>
-                        <div className="text-xs font-mono text-textMuted">{fmt.money(d.alacarte_price_cents)} \u2014 single asset</div>
+                        <div className="text-xs font-mono text-textMuted">{fmt.money(d.alacarte_price_cents)} — single asset</div>
                       </div>
                     </div>
                   ))}
@@ -172,7 +182,7 @@ export default function Dashboard() {
               <div className="overline mb-3">// THE NEXT STEP</div>
               <h3 className="font-display text-2xl text-cream mb-2">KingdomTitleDeed.com</h3>
               <p className="text-textMuted text-sm mb-4">Once the codes activate, the Title Deed is the next territory. Read it slowly.</p>
-              <a href="https://KingdomTitleDeed.com" target="_blank" rel="noreferrer" className="btn-ghost text-xs">Visit \u2192</a>
+              <a href="https://KingdomTitleDeed.com" target="_blank" rel="noreferrer" className="btn-ghost text-xs">Visit →</a>
             </div>
           </div>
         </div>

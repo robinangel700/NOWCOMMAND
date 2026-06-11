@@ -92,9 +92,6 @@ def ensure_pdf(force: bool = False) -> str:
         "4. Wait for Wednesday. The drop is already scheduled.",
         body))
     story.append(Spacer(1, 24))
-    story.append(Paragraph(
-        "This document is a placeholder generated for launch. Robin will swap in the final illuminated edition shortly.",
-        foot))
 
     doc.build(story, onFirstPage=page_decoration, onLaterPages=page_decoration)
     return PDF_PATH

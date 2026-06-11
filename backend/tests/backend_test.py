@@ -611,7 +611,6 @@ class TestProfile:
             "bio": "I am a sovereign.",
             "avatar_url": "https://img/avatar.png",
             "cover_image_url": "https://img/cover.png",
-            "pronouns": "they/them",
             "location": "Earth",
             "website": "https://example.com",
             "setup_completed": True,

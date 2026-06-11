@@ -49,7 +49,7 @@ export default function Auth({ mode = "login" }) {
           </div>
           <div>
             <label className="overline">// PASSWORD</label>
-            <input data-testid="auth-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" minLength={6} required />
+            <input data-testid="auth-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" minLength={6} required />
           </div>
           <button data-testid="auth-submit" type="submit" disabled={busy} className="btn-gold w-full justify-center disabled:opacity-60">
             {busy ? "Working..." : mode === "login" ? "Sign in" : "Create my seat"}

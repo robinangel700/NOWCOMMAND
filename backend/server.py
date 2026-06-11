@@ -26,9 +26,10 @@ from models import (
     PostIn, CommentIn, NoteIn, QuizIn, QuizAttemptIn, LearningPathIn,
     ChecklistItemIn, SettingsIn, MonthlySummaryIn, ReminderIn, CancelIn,
     WaitlistIn, ManifestoIn, ArticleIn, ArticleUpdate, LeadIn, ProfileIn,
-    EmailTemplateUpdate,
+    EmailTemplateUpdate, BrandIn, PricingIn, TestimonialIn, TestimonialModerate,
+    DropCommentIn, DMSendIn, NotifPrefsIn,
 )
-from services import email_service, stripe_service, pdf_service, scheduler
+from services import email_service, stripe_service, pdf_service, scheduler, welcome_book, ad_copy
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 log = logging.getLogger("nowrealm")
@@ -40,6 +41,7 @@ async def lifespan(_app: FastAPI):
     from seed import seed_all
     await seed_all()
     pdf_service.ensure_pdf()
+    welcome_book.ensure_pdf()
     scheduler.start()
     log.info("NOWREALM started.")
     yield
@@ -187,6 +189,24 @@ async def signup(body: SignupIn):
         "downloads_available": [],
     }
     await db.users.insert_one(user)
+    # Notify admin if they want signup notifications
+    try:
+        admin = await db.users.find_one({"role": "admin"})
+        if admin and (admin.get("notif_prefs") or {}).get("admin_on_signup", True):
+            await email_service.send_email(
+                admin["email"],
+                f"New NOWREALM signup: {user['email']}",
+                email_service.wrap_html(
+                    "Someone just signed up",
+                    f"<p>{user.get('name','')} ({user['email']}) just created an account. "
+                    f"They have not paid yet \u2014 watch for the conversion.</p>",
+                    cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/admin?tab=members",
+                    cta_label="Open members",
+                ),
+                kind="admin_signup",
+            )
+    except Exception:
+        log.exception("admin signup notify failed")
     token = create_token(user["id"], "member")
     return {"token": token, "user": _public_user(user)}
 
@@ -367,6 +387,23 @@ async def checkout_status(session_id: str, user: dict = Depends(get_current_user
                 subj = "Welcome to NOWREALM"
                 html = email_service.wrap_html("Welcome", "<p>Open your dashboard.</p>")
             await email_service.send_email(user["email"], subj, html, kind="onboarding")
+            # Admin notification of purchase
+            try:
+                admin = await db.users.find_one({"role": "admin"})
+                if admin and (admin.get("notif_prefs") or {}).get("admin_on_purchase", True):
+                    await email_service.send_email(
+                        admin["email"],
+                        f"💰 New {new_tier} member: {user['email']}",
+                        email_service.wrap_html(
+                            f"{user.get('name','')} just crossed the threshold",
+                            f"<p>Tier: <strong>{new_tier}</strong></p><p>Amount: ${(tx.get('amount_cents') or 0)/100:.2f}</p>",
+                            cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/admin?tab=members",
+                            cta_label="Open members",
+                        ),
+                        kind="admin_purchase",
+                    )
+            except Exception:
+                pass
         elif tx["type"] == "alacarte":
             drop_id = tx.get("drop_id")
             await db.alacarte_unlocks.insert_one({
@@ -431,6 +468,30 @@ async def billing_cancel(body: CancelIn, user: dict = Depends(get_current_user))
             "canceled_at": now_iso(),
             "cancel_reason": body.reason or "",
         }})
+        # Send cancel confirmation
+        try:
+            import email_templates as _et
+            subj, html = _et.render("cancel_confirmation", {"frontend": os.environ.get("FRONTEND_BASE_URL", "")})
+            await email_service.send_email(user["email"], subj, html, kind="cancel_confirmation")
+        except Exception:
+            pass
+        # Notify admin
+        try:
+            admin = await db.users.find_one({"role": "admin"})
+            if admin and (admin.get("notif_prefs") or {}).get("admin_on_cancel", True):
+                await email_service.send_email(
+                    admin["email"],
+                    f"Cancellation: {user['email']}",
+                    email_service.wrap_html(
+                        f"{user.get('name','')} canceled",
+                        f"<p>Reason: <em>{body.reason or 'not provided'}</em></p>",
+                        cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/admin?tab=members",
+                        cta_label="See members",
+                    ),
+                    kind="admin_cancel",
+                )
+        except Exception:
+            pass
         return {"status": "canceled"}
     raise HTTPException(400, "Unknown action")
 
@@ -471,10 +532,10 @@ async def stripe_webhook(request: Request):
         # Stripe handles smart retries automatically; we just notify member.
         await email_service.send_email(
             user["email"],
-            "Payment hiccup \u2014 NOWREALM auto-retry scheduled",
+            "Payment hiccup — NOWREALM auto-retry scheduled",
             email_service.wrap_html(
                 "A small detour, no breach.",
-                "<p>Your last NOWREALM payment didn\u2019t go through. Stripe will retry automatically over the next several days.</p>"
+                "<p>Your last NOWREALM payment didn’t go through. Stripe will retry automatically over the next several days.</p>"
                 "<p>One click below updates your card in 10 seconds.</p>",
                 cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/billing",
                 cta_label="Update card",
@@ -862,7 +923,6 @@ async def admin_create_drop(body: DropIn, user: dict = Depends(get_current_user)
     published = False
     published_at = None
     if not body.scheduled_for:
-        # If no schedule, publish immediately.
         published = True
         published_at = now_iso()
     doc = {
@@ -876,14 +936,41 @@ async def admin_create_drop(body: DropIn, user: dict = Depends(get_current_user)
         "quick_win": body.quick_win,
         "alacarte_price_cents": body.alacarte_price_cents,
         "tags": body.tags,
+        "youtube_url": body.youtube_url,
+        "transcript_md": body.transcript_md,
+        "related_links": body.related_links,
+        "community_announcement": body.community_announcement,
         "published": published,
         "published_at": published_at,
         "created_at": now_iso(),
         "created_by": user["id"],
     }
     await db.drops.insert_one(doc)
+    # If published immediately AND announcement supplied, create gold-banner community post.
+    if published and body.community_announcement:
+        await _post_drop_announcement(doc, body.community_announcement, user)
     doc.pop("_id", None)
     return {"drop": doc}
+
+
+async def _post_drop_announcement(d: dict, announcement: str, user: dict):
+    db = get_db()
+    pid = str(uuid.uuid4())
+    await db.posts.insert_one({
+        "id": pid,
+        "user_id": user["id"],
+        "user_name": user.get("name", "Robin Angel"),
+        "user_role": "admin",
+        "user_avatar": user.get("avatar_url", ""),
+        "body": announcement,
+        "kind": "new_drop_announcement",
+        "drop_id": d["id"],
+        "drop_title": d["title"],
+        "gold_banner": True,
+        "pinned": True,
+        "deleted": False,
+        "created_at": now_iso(),
+    })
 
 
 @api.patch("/admin/drops/{drop_id}")
@@ -1338,7 +1425,7 @@ async def public_user_profile(user_id: str, viewer: dict = Depends(get_current_u
     db = get_db()
     u = await db.users.find_one({"id": user_id}, {
         "_id": 0, "id": 1, "name": 1, "bio": 1, "avatar_url": 1,
-        "cover_image_url": 1, "pronouns": 1, "location": 1, "website": 1,
+        "cover_image_url": 1, "cover_position_y": 1, "location": 1, "website": 1,
         "tier": 1, "role": 1, "created_at": 1,
     })
     if not u:
@@ -1438,7 +1525,419 @@ async def admin_stats(user: dict = Depends(get_current_user)):
         "waitlist": await db.waitlist.count_documents({}),
         "emails_sent": await db.emails_outbox.count_documents({"status": "sent"}),
         "emails_queued": await db.emails_outbox.count_documents({"status": {"$in": ["queued", "queued_no_key"]}}),
+        "testimonials_pending": await db.testimonials.count_documents({"status": "pending"}),
+        "testimonials_approved": await db.testimonials.count_documents({"status": {"$in": ["approved", "featured"]}}),
+        "dms_unread_for_me": await db.dm_messages.count_documents({"recipient_id": user["id"], "read": False}),
     }
+
+
+# ============================================================
+#  IMAGE UPLOAD (avatar / cover / drop media)
+# ============================================================
+import base64
+
+@api.post("/upload/image")
+async def upload_image(payload: dict, user: dict = Depends(get_current_user)):
+    """Accept a data-URL (data:image/png;base64,...) or raw base64 and save to /app/backend/static/uploads."""
+    data = payload.get("data") or ""
+    purpose = payload.get("purpose", "misc")  # avatar | cover | drop | testimonial
+    if not data.startswith("data:"):
+        raise HTTPException(400, "Expected data URL")
+    try:
+        head, b64 = data.split(",", 1)
+        mime = head.split(";")[0].replace("data:", "")
+        ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}.get(mime, "bin")
+        raw = base64.b64decode(b64)
+        if len(raw) > 6 * 1024 * 1024:
+            raise HTTPException(413, "Image too large (max 6MB)")
+        fname = f"{user['id'][:8]}_{purpose}_{uuid.uuid4().hex[:10]}.{ext}"
+        out_dir = ROOT_DIR / "static" / "uploads"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / fname).write_bytes(raw)
+        return {"url": f"/static/uploads/{fname}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("upload failed")
+        raise HTTPException(400, f"Upload failed: {e}")
+
+
+# ============================================================
+#  BRAND + PRICING SETTINGS (admin-editable, applied site-wide)
+# ============================================================
+DEFAULT_BRAND = {
+    "site_name": "NOWREALM",
+    "tagline": "Cast out Mammon. Rule the Increase. Operate in Kairos.",
+    "primary_hex": "#D4AF37",
+    "primary_hi_hex": "#E5C158",
+    "ink_hex": "#F2EFE9",
+    "bg_hex": "#0A0A0A",
+    "surface_hex": "#121212",
+    "border_hex": "#332D21",
+    "display_font": "Cormorant Garamond",
+    "body_font": "Outfit",
+    "mono_font": "JetBrains Mono",
+    "logo_url": "",
+}
+
+@api.get("/public/brand")
+async def public_brand():
+    """Public read-only endpoint so frontend can theme without auth."""
+    b = await _get_setting("brand") or {}
+    return {**DEFAULT_BRAND, **b}
+
+
+@api.post("/admin/brand")
+async def admin_set_brand(body: BrandIn, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    current = await _get_setting("brand") or {}
+    update = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    current.update(update)
+    await _set_setting("brand", current)
+    return {"brand": {**DEFAULT_BRAND, **current}}
+
+
+@api.get("/admin/pricing")
+async def admin_get_pricing(user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    overrides = await _get_setting("pricing_overrides") or {}
+    return {
+        "full_monthly_cents": overrides.get("full_monthly_cents", int(os.environ.get("PRICE_FULL_MONTHLY_CENTS", 4400))),
+        "full_annual_cents": overrides.get("full_annual_cents", int(os.environ.get("PRICE_FULL_ANNUAL_CENTS", 50000))),
+        "foundational_monthly_cents": overrides.get("foundational_monthly_cents", int(os.environ.get("PRICE_FOUNDATIONAL_MONTHLY_CENTS", 1100))),
+        "full_after_promo_monthly_cents": overrides.get("full_after_promo_monthly_cents", int(os.environ.get("PRICE_FULL_AFTER_PROMO_CENTS", 7700))),
+        "promo_days": overrides.get("promo_days", int(os.environ.get("LAUNCH_PROMO_DAYS", 21))),
+        "cap": overrides.get("cap", int(os.environ.get("MEMBERSHIP_CAP", 300))),
+        "show_foundational_publicly": overrides.get("show_foundational_publicly", False),
+    }
+
+
+@api.post("/admin/pricing")
+async def admin_set_pricing(body: PricingIn, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    current = await _get_setting("pricing_overrides") or {}
+    update = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    current.update(update)
+    await _set_setting("pricing_overrides", current)
+    # Also keep doors.cap in sync
+    if "cap" in update:
+        doors = await _get_setting("doors") or {"open": True, "cap": 300}
+        doors["cap"] = int(update["cap"])
+        await _set_setting("doors", doors)
+    return {"pricing": current}
+
+
+# ============================================================
+#  TESTIMONIALS
+# ============================================================
+
+@api.post("/testimonials")
+async def submit_testimonial(body: TestimonialIn, user: dict = Depends(get_current_user)):
+    if not _is_member_or_admin(user):
+        raise HTTPException(403, "Members only")
+    db = get_db()
+    t = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "user_name": user.get("name", "Sovereign"),
+        "user_avatar": user.get("avatar_url", ""),
+        "headline": body.headline or "",
+        "body": body.body,
+        "status": "pending",
+        "created_at": now_iso(),
+    }
+    await db.testimonials.insert_one(t)
+    # Notify admin
+    admin = await db.users.find_one({"role": "admin"})
+    if admin:
+        prefs = (admin.get("notif_prefs") or {})
+        if prefs.get("admin_on_testimonial", True):
+            await email_service.send_email(
+                admin["email"],
+                f"New testimonial from {t['user_name']}",
+                email_service.wrap_html(
+                    f"{t['user_name']} just submitted a testimonial",
+                    f"<p><strong>{t.get('headline','')}</strong></p><p>{t['body']}</p>",
+                    cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/admin?tab=testimonials",
+                    cta_label="Review & approve",
+                ),
+                kind="admin_testimonial",
+            )
+    t.pop("_id", None)
+    return {"testimonial": t}
+
+
+@api.get("/public/testimonials")
+async def public_testimonials():
+    db = get_db()
+    rows = await db.testimonials.find({"status": {"$in": ["approved", "featured"]}}, {"_id": 0}).sort([("status", -1), ("created_at", -1)]).limit(50).to_list(50)
+    return {"testimonials": rows}
+
+
+@api.get("/admin/testimonials")
+async def admin_list_testimonials(user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    rows = await db.testimonials.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"testimonials": rows}
+
+
+@api.patch("/admin/testimonials/{tid}")
+async def admin_moderate_testimonial(tid: str, body: TestimonialModerate, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    update = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    update["moderated_at"] = now_iso()
+    await db.testimonials.update_one({"id": tid}, {"$set": update})
+    return {"status": "ok"}
+
+
+@api.post("/admin/win-to-testimonial/{post_id}")
+async def admin_convert_win_to_testimonial(post_id: str, user: dict = Depends(get_current_user)):
+    """One-click: take an approved community win post and seed it as a pending testimonial for the user."""
+    await require_admin(user)
+    db = get_db()
+    p = await db.posts.find_one({"id": post_id})
+    if not p:
+        raise HTTPException(404, "Post not found")
+    existing = await db.testimonials.find_one({"source_post_id": post_id})
+    if existing:
+        return {"status": "already_seeded", "id": existing["id"]}
+    t = {
+        "id": str(uuid.uuid4()),
+        "user_id": p["user_id"],
+        "user_name": p.get("user_name", "Sovereign"),
+        "user_avatar": p.get("user_avatar", ""),
+        "headline": "",
+        "body": p["body"],
+        "status": "pending",
+        "source_post_id": post_id,
+        "created_at": now_iso(),
+    }
+    await db.testimonials.insert_one(t)
+    # Notify the user so they can confirm permission
+    u = await db.users.find_one({"id": p["user_id"]})
+    if u:
+        await email_service.send_email(
+            u["email"],
+            "Robin wants to feature your win",
+            email_service.wrap_html(
+                "Your win moved Robin",
+                f"<p>Robin saw your post in the win thread and would love to feature it as a testimonial:</p>"
+                f"<blockquote style='border-left:3px solid #D4AF37;padding-left:16px;color:#A39F98'>{p['body']}</blockquote>"
+                "<p>If that's a yes, just reply to this email or do nothing \u2014 Robin won't publish without your nod.</p>",
+            ),
+            kind="testimonial_permission",
+        )
+    t.pop("_id", None)
+    return {"testimonial": t}
+
+
+# ============================================================
+#  DROP COMMENTS (auto cross-post to community)
+# ============================================================
+
+@api.get("/drops/{drop_id}/comments")
+async def list_drop_comments(drop_id: str, user: dict = Depends(get_current_user)):
+    db = get_db()
+    rows = await db.drop_comments.find({"drop_id": drop_id, "deleted": {"$ne": True}}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    return {"comments": rows}
+
+
+@api.post("/drops/{drop_id}/comments")
+async def post_drop_comment(drop_id: str, body: DropCommentIn, user: dict = Depends(get_current_user)):
+    if not _is_member_or_admin(user):
+        raise HTTPException(403, "Members only")
+    db = get_db()
+    d = await db.drops.find_one({"id": drop_id}, {"_id": 0})
+    if not d:
+        raise HTTPException(404, "Drop not found")
+    cid = str(uuid.uuid4())
+    doc = {
+        "id": cid, "drop_id": drop_id, "user_id": user["id"],
+        "user_name": user.get("name", "Sovereign"), "user_avatar": user.get("avatar_url", ""),
+        "user_role": user.get("role", "member"),
+        "body": body.body, "deleted": False, "created_at": now_iso(),
+    }
+    await db.drop_comments.insert_one(doc)
+    # Cross-post to community if requested AND user is full-tier or admin (community is sovereign-only)
+    if body.cross_post_to_community and _is_full_member_or_admin(user):
+        pid = str(uuid.uuid4())
+        await db.posts.insert_one({
+            "id": pid, "user_id": user["id"],
+            "user_name": user.get("name", "Sovereign"),
+            "user_role": user.get("role", "member"),
+            "user_avatar": user.get("avatar_url", ""),
+            "body": f"💬 On the drop \"{d['title']}\":\n\n{body.body}",
+            "kind": "drop_comment",
+            "drop_id": drop_id,
+            "pinned": False, "deleted": False, "created_at": now_iso(),
+        })
+        await db.drop_comments.update_one({"id": cid}, {"$set": {"community_post_id": pid}})
+    return {"id": cid}
+
+
+@api.delete("/drops/comments/{comment_id}")
+async def delete_drop_comment(comment_id: str, user: dict = Depends(get_current_user)):
+    db = get_db()
+    c = await db.drop_comments.find_one({"id": comment_id})
+    if not c:
+        raise HTTPException(404, "Not found")
+    if user.get("role") != "admin" and c.get("user_id") != user["id"]:
+        raise HTTPException(403, "Forbidden")
+    await db.drop_comments.update_one({"id": comment_id}, {"$set": {"deleted": True}})
+    if c.get("community_post_id"):
+        await db.posts.update_one({"id": c["community_post_id"]}, {"$set": {"deleted": True}})
+    return {"status": "ok"}
+
+
+# ============================================================
+#  DIRECT MESSAGES (member-to-member)
+# ============================================================
+
+def _thread_key(a: str, b: str) -> str:
+    return ":".join(sorted([a, b]))
+
+
+@api.post("/dm/send")
+async def dm_send(body: DMSendIn, user: dict = Depends(get_current_user)):
+    if not _is_member_or_admin(user):
+        raise HTTPException(403, "Members only")
+    db = get_db()
+    if body.recipient_id == user["id"]:
+        raise HTTPException(400, "Cannot DM yourself")
+    recipient = await db.users.find_one({"id": body.recipient_id})
+    if not recipient:
+        raise HTTPException(404, "Recipient not found")
+    if not _is_member_or_admin(recipient):
+        raise HTTPException(400, "Recipient is not an active member")
+    tk = _thread_key(user["id"], body.recipient_id)
+    msg = {
+        "id": str(uuid.uuid4()),
+        "thread_key": tk,
+        "sender_id": user["id"],
+        "sender_name": user.get("name", "Sovereign"),
+        "sender_avatar": user.get("avatar_url", ""),
+        "recipient_id": body.recipient_id,
+        "body": body.body,
+        "read": False,
+        "created_at": now_iso(),
+    }
+    await db.dm_messages.insert_one(msg)
+    await db.dm_threads.update_one(
+        {"key": tk},
+        {"$set": {"key": tk, "participants": sorted([user["id"], body.recipient_id]),
+                  "last_body": body.body, "last_sender_id": user["id"], "last_at": now_iso()}},
+        upsert=True,
+    )
+    msg.pop("_id", None)
+    return {"message": msg}
+
+
+@api.get("/dm/threads")
+async def dm_threads(user: dict = Depends(get_current_user)):
+    if not _is_member_or_admin(user):
+        raise HTTPException(403, "Members only")
+    db = get_db()
+    threads = []
+    rows = await db.dm_threads.find({"participants": user["id"]}, {"_id": 0}).sort("last_at", -1).to_list(200)
+    for t in rows:
+        other_id = [p for p in t["participants"] if p != user["id"]][0]
+        other = await db.users.find_one({"id": other_id}, {"_id": 0, "id": 1, "name": 1, "avatar_url": 1, "tier": 1, "role": 1})
+        unread = await db.dm_messages.count_documents({"thread_key": t["key"], "recipient_id": user["id"], "read": False})
+        threads.append({**t, "other": other, "unread": unread})
+    return {"threads": threads}
+
+
+@api.get("/dm/thread/{user_id}")
+async def dm_thread(user_id: str, user: dict = Depends(get_current_user)):
+    if not _is_member_or_admin(user):
+        raise HTTPException(403, "Members only")
+    db = get_db()
+    tk = _thread_key(user["id"], user_id)
+    msgs = await db.dm_messages.find({"thread_key": tk}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    # Mark recipient-side as read
+    await db.dm_messages.update_many({"thread_key": tk, "recipient_id": user["id"], "read": False}, {"$set": {"read": True}})
+    other = await db.users.find_one({"id": user_id}, {"_id": 0, "id": 1, "name": 1, "avatar_url": 1, "tier": 1, "role": 1})
+    return {"messages": msgs, "other": other}
+
+
+# ============================================================
+#  NOTIFICATION PREFS + DAILY DIGEST
+# ============================================================
+
+DEFAULT_PREFS = {
+    "admin_on_signup": True,
+    "admin_on_purchase": True,
+    "admin_on_cancel": True,
+    "admin_on_post": False,
+    "admin_on_testimonial": True,
+    "admin_on_lead": False,
+    "admin_on_payment_failed": True,
+    "admin_digest_frequency": "daily",
+    "member_daily_digest": True,
+    "member_drop_announcement": True,
+    "member_dm_notify": True,
+}
+
+@api.get("/me/notif-prefs")
+async def my_notif_prefs(user: dict = Depends(get_current_user)):
+    return {"prefs": {**DEFAULT_PREFS, **(user.get("notif_prefs") or {})}}
+
+
+@api.patch("/me/notif-prefs")
+async def update_notif_prefs(body: NotifPrefsIn, user: dict = Depends(get_current_user)):
+    db = get_db()
+    update = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    current = user.get("notif_prefs") or {}
+    current.update(update)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"notif_prefs": current}})
+    return {"prefs": {**DEFAULT_PREFS, **current}}
+
+
+# ============================================================
+#  AD COPY GENERATOR
+# ============================================================
+
+@api.post("/admin/ad-copy/drop/{drop_id}")
+async def admin_ad_copy_drop(drop_id: str, payload: dict, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    d = await db.drops.find_one({"id": drop_id}, {"_id": 0})
+    if not d:
+        raise HTTPException(404, "Drop not found")
+    days_left = await _promo_remaining_seconds() or 0
+    days_left = max(0, int(days_left / 86400))
+    return {"variants": ad_copy.for_drop(d, public=bool(payload.get("public", False)), days_left=days_left)}
+
+
+@api.post("/admin/ad-copy/article/{article_id}")
+async def admin_ad_copy_article(article_id: str, payload: dict, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    a = await db.articles.find_one({"id": article_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(404, "Article not found")
+    return {"variants": ad_copy.for_article(a, public=bool(payload.get("public", True)))}
+
+
+# ============================================================
+#  WELCOME BOOK DOWNLOAD
+# ============================================================
+
+@api.get("/downloads/welcome_book")
+async def download_welcome_book(user: dict = Depends(get_current_user)):
+    if user.get("tier") not in ("full", "foundational") and user.get("role") != "admin":
+        raise HTTPException(403, "Active membership required")
+    path = welcome_book.ensure_pdf()
+    return FileResponse(path, media_type="application/pdf", filename="Dominion_Over_Mammon.pdf")
+
+
+@api.post("/admin/regenerate-welcome-book")
+async def admin_regen_welcome_book(user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    path = welcome_book.ensure_pdf(force=True)
+    return {"path": path}
 
 
 # ---------- mount and CORS ----------

@@ -1,0 +1,60 @@
+{
+  "summary": "Iteration 3 verification of NOWREALM Phase 3 (brand/pricing/testimonials/DM/drop-comments/welcome-book/ad-copy/notif-prefs/upload/profile/cancel-funnel/admin-tabs). Backend: 86/86 pytest pass after 2 in-place fixes (DM threads coroutine bug + ProfileIn cover_position_y field + projection). Frontend smoke: ALL targeted data-testids present (pricing has 2 cards no foundational, stewardship cancel-funnel works, profile uploads + cover-drag-area, admin has Brand/Pricing/Testimonials/Ad Copy/Steward of Stewards/Notifications tabs, /testimonials + /dm render).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/dm/threads",
+        "issue": "FIXED IN-PLACE BY TESTER. server.py:1843 used `async for t in db.dm_threads.find(...).to_list(200):` which is invalid — .to_list() returns an awaitable, not an async iterable. Caused 500 on every DM thread list call. Patched to `rows = await ... .to_list(200); for t in rows:`."
+      },
+      {
+        "endpoint": "PATCH /api/me/profile",
+        "issue": "FIXED IN-PLACE BY TESTER. ProfileIn pydantic model was missing `cover_position_y` (so the field was silently dropped before reaching DB) AND /users/{id}/public projection didn't return it. Also removed leftover `pronouns: Optional[str]` from ProfileIn per spec. Added cover_position_y to both ProfileIn (models.py:172) and the public projection (server.py:1428). Re-tested — value 42 now persists and is returned."
+      },
+      {
+        "collection": "checklist (Mongo seed)",
+        "issue": "Existing seeded checklist item #5 in DB still contains legacy copy: 'Upload a profile picture, cover image, bio and pronouns in Admin > Profile.' The seed.py source is clean, but the seed routine is not updating already-inserted documents. Either delete/reseed the checklist collection, or change seed to upsert the description field."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "REVIEW tester's 2 minor backend patches: (a) server.py dm_threads async iteration fix; (b) models.py ProfileIn — added cover_position_y, removed pronouns; (c) server.py /users/{id}/public projection — replaced 'pronouns' with 'cover_position_y'. Also removed `pronouns` from backend_test.py TestProfile payload so the existing iteration_2 test passes under the new contract.",
+    "MIGRATE/RESEED the admin checklist to drop the word 'pronouns' from item #5 description (DB row still has old text — visible on /admin Launch Wizard screenshot)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 1952 lines. Strongly recommend splitting into routers/{brand,pricing,testimonials,dm,uploads,ad_copy,welcome_book}.py — this iteration alone added ~400 lines of route code in a single file.",
+    "DM endpoints don't validate body length or rate-limit. A malicious member could flood dm_messages. Add a max body length (e.g. 4 KB) and per-user per-minute throttle.",
+    "/upload/image trusts user-declared MIME from the data-URL prefix and only enforces a 6MB cap. It does NOT sniff content magic bytes — an attacker could upload arbitrary binary labelled as image/png. Consider Pillow.Image.open() round-trip validation.",
+    "DM `dm_thread` GET marks recipient-side as read but never verifies the requester is one of the participants — currently safe because thread_key is derived from BOTH ids, but a malicious user could still call with any user_id and silently mark unrelated threads (none of theirs) as read. Add an explicit assertion `if user['id'] not in {a,b}`.",
+    "Public testimonials endpoint returns up to 50 rows with .sort([('status', -1), ('created_at', -1)]) — string sort puts 'pending' BEFORE 'featured'/'approved' in some Mongo versions; rely on the $in filter (it works here), but consider explicit ordering with $cond.",
+    "DEFAULT_PREFS in server.py:1868 is defined inline; consider moving to models.py so frontend can import the same defaults via a /constants endpoint.",
+    "Iter2 minor still applies: POST /admin/trigger-drops doesn't also call scheduler._publish_due_articles (out of scope this iteration, just a reminder).",
+    "/admin/win-to-testimonial doesn't verify the source post has kind=='win' — admin can convert ANY post (drop_comment, regular, etc.) into a testimonial. Add guard `if p.get('kind') != 'win': 400`."
+  ],
+  "updated_files": [
+    "/app/backend/server.py",
+    "/app/backend/models.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_iteration3.py"
+  ],
+  "success_rate": {
+    "backend": "100% (86/86 pytest cases pass)",
+    "frontend": "100% smoke (pricing/testimonials/login/stewardship/profile/dm/admin all verified via Playwright)"
+  },
+  "test_credentials": "Admin: robinangel700@gmail.com / BoopLoop777. Test members use @example.com (pydantic EmailStr rejects .test).",
+  "seed_data_creation": "Tests create TEST_ prefixed users, drops, articles, testimonials, posts, dms. Most TEST_ data persists for re-runs; article tests teardown their own data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest suite is now split into /app/backend/tests/backend_test.py (61 iter1+iter2 cases) and /app/backend/tests/test_iteration3.py (25 iter3 cases). Run both: `pytest /app/backend/tests/ -v`. Iter3 fixes: ProfileIn no longer accepts 'pronouns' (will be silently dropped by pydantic), and /users/{id}/public exposes 'cover_position_y' instead. /api/dm/threads now uses await-then-iterate pattern. Frontend smoke verified: brand CSS vars are applied via /public/brand (BrandLoader in App.js), cancel-funnel modal opens via data-testid='cancel-funnel'.",
+  "rca of the issue": "Two coding bugs RCA: (1) GET /dm/threads — author used `async for x in cursor.to_list(n)` which is the wrong API; Motor's cursor returns an async iterator without .to_list, OR you call `await cursor.to_list(n)` and iterate the resulting list. Symptom: 500 with TypeError 'async for requires __aiter__'. Reproduction: send a DM then GET /dm/threads. Fix applied: `rows = await ... .to_list(200); for t in rows:`. (2) cover_position_y wasn't persisting — pydantic's ProfileIn schema dropped any unknown field, so the PATCH body's cover_position_y never reached `model_dump(exclude_unset=True)`. Plus the public projection didn't include it. Reproduction: PATCH /me/profile with cover_position_y=42 then GET /users/{id}/public — returned no such key. Fix: add field to model + add key to projection. Side effect: removed lingering pronouns from model + projection per Phase-3 spec."
+}

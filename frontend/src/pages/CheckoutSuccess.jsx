@@ -46,7 +46,7 @@ export default function CheckoutSuccess() {
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success("Download started");
-    } catch { toast.error("Could not download \u2014 try the dashboard"); }
+    } catch { toast.error("Could not download — try the dashboard"); }
   };
 
   return (
@@ -55,7 +55,7 @@ export default function CheckoutSuccess() {
         {status === "polling" && (
           <div className="text-center">
             <Hourglass className="w-8 h-8 text-gold animate-glow mx-auto mb-6" />
-            <h1 className="font-display text-4xl text-cream">Sealing your seat\u2026</h1>
+            <h1 className="font-display text-4xl text-cream">Sealing your seat…</h1>
             <p className="text-textMuted mt-3">Stripe is finalizing. This takes a few seconds.</p>
           </div>
         )}
@@ -69,7 +69,15 @@ export default function CheckoutSuccess() {
             </p>
             <div className="gold-line my-8" />
             <div className="flex flex-wrap gap-4">
-              <button data-testid="download-pdf-now" onClick={downloadPDF} className="btn-gold"><Download className="w-4 h-4" /> Download Activation Codes</button>
+              <button data-testid="download-pdf-now" onClick={downloadPDF} className="btn-gold"><Download className="w-4 h-4" /> Activation Codes</button>
+              <button data-testid="download-book-now" onClick={async () => {
+                try {
+                  const resp = await api.get("/downloads/welcome_book", { responseType: "blob" });
+                  const url = window.URL.createObjectURL(new Blob([resp.data], { type: "application/pdf" }));
+                  const a = document.createElement("a"); a.href = url; a.download = "Dominion_Over_Mammon.pdf"; a.click(); window.URL.revokeObjectURL(url);
+                  toast.success("Book downloaded");
+                } catch { toast.error("Could not download"); }
+              }} className="btn-ghost"><Download className="w-4 h-4" /> Welcome Book</button>
               <button data-testid="go-dashboard" onClick={() => nav("/dashboard")} className="btn-ghost">Enter your dashboard</button>
             </div>
             <ul className="mt-10 space-y-3 text-sm text-textMuted">

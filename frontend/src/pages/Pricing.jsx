@@ -63,16 +63,9 @@ export default function Pricing() {
       desc: "12 months. Locked in. Auto-renew.",
       features: ["Everything in Monthly", "Annual = 2 months free vs $44/mo", "Locked at founder rate", "Priority on a-la-carte drops"],
     },
-    {
-      key: "foundational_monthly",
-      name: "Foundational",
-      price: fmt.money(state.foundational_monthly_cents),
-      cadence: "/mo",
-      tag: "ENTRY",
-      desc: "Foundational content only. No community. For those rebuilding the base.",
-      features: ["Drops marked Foundational", "Quizzes & notes", "Activation Codes PDF", "No community / no premium drops"],
-    },
   ];
+  // Foundational ($11) is intentionally NOT shown on the public sales page.
+  // It only appears inside the cancel flow as a softer landing.
 
   return (
     <div className="min-h-screen py-24 px-6 lg:px-10">
@@ -102,7 +95,7 @@ export default function Pricing() {
           </div>
         )}
 
-        <div className="grid md:grid-cols-3 gap-px bg-borderGold mt-16">
+        <div className="grid md:grid-cols-2 gap-px bg-borderGold mt-16">
           {plans.map((p) => (
             <div key={p.key} className={`bg-void p-8 md:p-10 ${p.highlight ? "ring-1 ring-gold" : ""}`}>
               <div className="flex items-center justify-between">
@@ -135,7 +128,7 @@ export default function Pricing() {
         </div>
 
         <div className="mt-16 text-xs font-mono uppercase tracking-[0.25em] text-textDim">
-          Auto-renew. Cancel, pause, or downgrade anytime from your billing portal. {state.stripe_real ? "Live Stripe." : "Stripe in dev mode \u2014 use Robin's real key in .env to go live."}
+          Auto-renew. Cancel, pause, or downgrade anytime from your billing portal. {state.stripe_real ? "Live Stripe." : "Stripe in dev mode — use Robin's real key in .env to go live."}
         </div>
       </div>
     </div>

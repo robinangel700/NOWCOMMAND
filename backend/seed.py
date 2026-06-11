@@ -6,7 +6,7 @@ from auth import hash_password
 
 
 DEFAULT_CHECKLIST = [
-    ("Set your creator profile", "Upload a profile picture, cover image, bio and pronouns in Admin > Profile. Members see this on your posts and across the community.", "/admin?tab=profile"),
+    ("Set your creator profile", "Upload a profile picture, cover image, and bio in Admin > Profile. Members see this on your posts and across the community.", "/admin?tab=profile"),
     ("Upload the final Mammon Breaker PDF", "Drop the polished PDF into /app/backend/static/downloads/mammon_breaker_activation_codes.pdf then press 'Regenerate' in Admin > Launch.", "/admin?tab=launch"),
     ("Write your One Page Manifesto", "Admin > Community > Manifesto. Members see it pinned in the community and on /about.", "/admin?tab=community"),
     ("Approve the community house rules", "Admin > Community > Rules. Edit or accept defaults.", "/admin?tab=community"),
@@ -76,11 +76,11 @@ async def seed_all():
             "We do not negotiate with delay. We evict it.\n\n"
             "We do not wait for the right time. We carry it.\n\n"
             "We rule over the increase. We operate in Kairos. We rest as sovereigns.\n\n"
-            "*\u2014 Robin Angel*"
+            "*— Robin Angel*"
         )},
         "community_rules": {"body_md": (
             "1. Speak from dominion, not from desperation.\n"
-            "2. Celebrate wins \u2014 even small ones \u2014 in the weekly thread.\n"
+            "2. Celebrate wins — even small ones — in the weekly thread.\n"
             "3. No selling, no funnel-dumping, no DM-pitching members.\n"
             "4. Confidentiality: what is shared here, stays here.\n"
             "5. Robin reserves the right to moderate. Dominion energy only."

@@ -155,7 +155,7 @@ export default function Landing() {
               { h: "You already buy study tools.", p: "Tools to stretch your mind. This stretches your entire reality. The same dollars, repurposed for dominion." },
               { h: "$44 to command your atmosphere.", p: "Live from dominion and sovereign rest. Step into the confidence that money must obey you." },
               { h: "Compress the years.", p: "Watch years of stagnation compress into sudden acceleration. The codes shorten the road." },
-              { h: "Charge up. Claim territory.", p: "Step into your breakthrough season \u2014 not next year, this week. The drop is already scheduled." },
+              { h: "Charge up. Claim territory.", p: "Step into your breakthrough season — not next year, this week. The drop is already scheduled." },
               { h: "Rewrite the bloodline.", p: "Actively rewrite your family's future history. The atmosphere you carry becomes the ceiling they inherit." },
             ].map((c, i) => (
               <div key={i} className="bg-void p-8 md:p-10">
@@ -208,7 +208,7 @@ export default function Landing() {
               ["Wednesday Drops", "A new transmission every Wednesday, scheduled and pre-loaded. You see what's coming before it lands."],
               ["The Activation Codes PDF", "Instant download the moment you cross the threshold. Read once tonight. Read again tomorrow."],
               ["Personalized Dashboard", "Saved progress, private metrics, custom learning paths, your own atmosphere."],
-              ["Quizzes & Notes", "Notes per drop, bookmarks, quiz attempts \u2014 a real archive of your dominion work."],
+              ["Quizzes & Notes", "Notes per drop, bookmarks, quiz attempts — a real archive of your dominion work."],
               ["Sovereign Community", "Posts, comments, the Weekly Biggest Win thread, the One Page Manifesto pinned at the top."],
               ["Quick-Win Assets", "A monthly asset under 15 minutes. Designed to ship a result before you finish your coffee."],
               ["Monthly Executive Summary", "Three bullets of what matters. Three of what to ignore. One resource to use."],

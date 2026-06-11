@@ -18,6 +18,26 @@ async def _publish_due_drops():
     async for d in cursor:
         await db.drops.update_one({"id": d["id"]}, {"$set": {"published": True, "published_at": now}})
         log.info("Auto-published drop %s", d.get("title"))
+        # Create gold-banner community post if announcement supplied
+        if d.get("community_announcement"):
+            import uuid as _uuid
+            admin = await db.users.find_one({"role": "admin"})
+            if admin:
+                await db.posts.insert_one({
+                    "id": str(_uuid.uuid4()),
+                    "user_id": admin["id"],
+                    "user_name": admin.get("name", "Robin Angel"),
+                    "user_role": "admin",
+                    "user_avatar": admin.get("avatar_url", ""),
+                    "body": d["community_announcement"],
+                    "kind": "new_drop_announcement",
+                    "drop_id": d["id"],
+                    "drop_title": d["title"],
+                    "gold_banner": True,
+                    "pinned": True,
+                    "deleted": False,
+                    "created_at": now_iso(),
+                })
         try:
             import email_templates as et
             subj, html = et.render("drop_published", {
@@ -29,6 +49,9 @@ async def _publish_due_drops():
             subj, html = f"NEW DROP: {d['title']}", wrap_html(d["title"], "A new transmission landed.")
         async for u in db.users.find({"tier": {"$in": ["full", "foundational"]}}):
             if d.get("foundational") is False and u.get("tier") == "foundational":
+                continue
+            prefs = u.get("notif_prefs") or {}
+            if prefs.get("member_drop_announcement", True) is False:
                 continue
             await send_email(u["email"], subj, html, kind="drop_published")
 
@@ -103,9 +126,9 @@ async def _ensure_weekly_win_thread():
     import uuid
     post_id = str(uuid.uuid4())
     body = (
-        f"Weekly Biggest Win Thread \u2014 {now.strftime('%B %d, %Y')}\n\n"
+        f"Weekly Biggest Win Thread — {now.strftime('%B %d, %Y')}\n\n"
         "What is the biggest win the codes produced for you this week? "
-        "Even a small shift counts \u2014 momentum compounds. Drop it below."
+        "Even a small shift counts — momentum compounds. Drop it below."
     )
     await db.posts.insert_one({
         "id": post_id,

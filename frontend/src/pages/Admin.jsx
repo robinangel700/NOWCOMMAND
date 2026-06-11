@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Sparkles, CheckSquare, Square, Send, Users, Hourglass, Mail, FileText, MessageSquare, Bell, Plus, Rocket, BookOpen, UserCog, ChevronRight, ExternalLink, AtSign, Edit3, ArrowRight, Eye } from "lucide-react";
+import { Sparkles, CheckSquare, Square, Send, Users, Hourglass, Mail, FileText, MessageSquare, Bell, Plus, Rocket, BookOpen, UserCog, ChevronRight, ExternalLink, AtSign, Edit3, ArrowRight, Eye, Award, Palette, DollarSign, Megaphone, HandHeart, Copy } from "lucide-react";
 import { api, fmt } from "../lib/api";
 import { toast } from "sonner";
 import { MyProfile } from "./Profile";
@@ -10,6 +10,9 @@ const TABS = [
   { id: "checklist", label: "Checklist", icon: CheckSquare },
   { id: "drops", label: "Drops", icon: Sparkles },
   { id: "articles", label: "Articles", icon: BookOpen },
+  { id: "testimonials", label: "Testimonials", icon: Award },
+  { id: "ad-copy", label: "Ad Copy", icon: Megaphone },
+  { id: "steward-stewards", label: "Steward of Stewards", icon: HandHeart },
   { id: "members", label: "Members", icon: Users },
   { id: "leads", label: "Leads", icon: AtSign },
   { id: "summary", label: "Summary", icon: FileText },
@@ -17,6 +20,9 @@ const TABS = [
   { id: "reminders", label: "Reminders", icon: Bell },
   { id: "emails", label: "Emails", icon: Mail },
   { id: "email-log", label: "Email Log", icon: Mail },
+  { id: "brand", label: "Brand & Visuals", icon: Palette },
+  { id: "pricing", label: "Pricing & Offers", icon: DollarSign },
+  { id: "notif-prefs", label: "My Notifications", icon: Bell },
   { id: "profile", label: "Profile", icon: UserCog },
   { id: "launch", label: "Launch", icon: Rocket },
 ];
@@ -48,6 +54,9 @@ export default function Admin() {
         {tab === "checklist" && <Checklist />}
         {tab === "drops" && <Drops />}
         {tab === "articles" && <Articles />}
+        {tab === "testimonials" && <TestimonialsAdmin />}
+        {tab === "ad-copy" && <AdCopyTab />}
+        {tab === "steward-stewards" && <StewardOfStewards />}
         {tab === "members" && <Members />}
         {tab === "leads" && <Leads />}
         {tab === "summary" && <Summary />}
@@ -55,6 +64,9 @@ export default function Admin() {
         {tab === "reminders" && <Reminders />}
         {tab === "emails" && <EmailTemplates />}
         {tab === "email-log" && <Outbox />}
+        {tab === "brand" && <BrandTab />}
+        {tab === "pricing" && <PricingTab />}
+        {tab === "notif-prefs" && <NotifPrefsTab />}
         {tab === "profile" && <MyProfile />}
         {tab === "launch" && <LaunchPanel />}
       </div>
@@ -186,7 +198,7 @@ function Checklist() {
 
 /* ----------------- DROPS ----------------- */
 function DropForm({ initial, onSaved, onCancel }) {
-  const [d, setD] = useState(initial || { title: "", body_md: "", media_url: "", foundational: false, scheduled_for: "", insight_preview: "", quick_win: false, alacarte_price_cents: "", tags: [] });
+  const [d, setD] = useState(initial || { title: "", body_md: "", media_url: "", foundational: false, scheduled_for: "", insight_preview: "", quick_win: false, alacarte_price_cents: "", tags: [], youtube_url: "", transcript_md: "", related_links: [], community_announcement: "" });
   const save = async (e) => {
     e.preventDefault();
     const payload = { ...d };
@@ -200,12 +212,34 @@ function DropForm({ initial, onSaved, onCancel }) {
       onSaved();
     } catch (e) { toast.error(e?.response?.data?.detail || "Save failed"); }
   };
+  const addLink = () => setD({ ...d, related_links: [...(d.related_links || []), { title: "", url: "" }] });
+  const updLink = (i, k, v) => { const arr = [...(d.related_links || [])]; arr[i] = { ...arr[i], [k]: v }; setD({ ...d, related_links: arr }); };
+  const delLink = (i) => { const arr = [...(d.related_links || [])]; arr.splice(i, 1); setD({ ...d, related_links: arr }); };
   return (
     <form onSubmit={save} className="panel p-6 space-y-4">
       <div><label className="overline">// TITLE</label><input data-testid="drop-title" value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} required /></div>
       <div><label className="overline">// INSIGHT PREVIEW</label><input value={d.insight_preview} onChange={(e) => setD({ ...d, insight_preview: e.target.value })} placeholder="Teaser members see while it's upcoming" /></div>
-      <div><label className="overline">// MEDIA URL</label><input value={d.media_url || ""} onChange={(e) => setD({ ...d, media_url: e.target.value })} placeholder="https://..." /></div>
-      <div><label className="overline">// BODY (markdown)</label><textarea rows={8} value={d.body_md} onChange={(e) => setD({ ...d, body_md: e.target.value })} required/></div>
+      <div><label className="overline">// YOUTUBE URL (unlisted is fine — embeds with full controls)</label><input data-testid="drop-youtube" value={d.youtube_url || ""} onChange={(e) => setD({ ...d, youtube_url: e.target.value })} placeholder="https://www.youtube.com/watch?v=..." /></div>
+      <div><label className="overline">// COVER IMAGE URL (used if no YouTube)</label><input value={d.media_url || ""} onChange={(e) => setD({ ...d, media_url: e.target.value })} placeholder="https://..." /></div>
+      <div><label className="overline">// BODY (markdown — full body shown on the drop page)</label><textarea rows={10} value={d.body_md} onChange={(e) => setD({ ...d, body_md: e.target.value })} required/></div>
+      <div><label className="overline">// TRANSCRIPT (optional — collapsible on drop page)</label><textarea rows={5} value={d.transcript_md || ""} onChange={(e) => setD({ ...d, transcript_md: e.target.value })} placeholder="Paste the YouTube transcript here"/></div>
+      <div>
+        <label className="overline">// RELATED LINKS</label>
+        <div className="space-y-2 mt-2">
+          {(d.related_links || []).map((l, i) => (
+            <div key={i} className="flex gap-2">
+              <input value={l.title || ""} onChange={(e) => updLink(i, "title", e.target.value)} placeholder="Title" className="flex-1"/>
+              <input value={l.url || ""} onChange={(e) => updLink(i, "url", e.target.value)} placeholder="https://..." className="flex-1"/>
+              <button type="button" onClick={() => delLink(i)} className="btn-ghost text-xs !border-ruby !text-ruby">×</button>
+            </div>
+          ))}
+          <button type="button" onClick={addLink} className="btn-ghost text-xs"><Plus className="w-3 h-3"/>Add link</button>
+        </div>
+      </div>
+      <div>
+        <label className="overline">// COMMUNITY ANNOUNCEMENT (becomes a pinned gold-banner post when this drop publishes)</label>
+        <textarea data-testid="drop-announcement" rows={3} value={d.community_announcement || ""} onChange={(e) => setD({ ...d, community_announcement: e.target.value })} placeholder="A short message that lands in the community feed with a gold banner the moment this drop publishes."/>
+      </div>
       <div className="grid sm:grid-cols-2 gap-4">
         <div><label className="overline">// SCHEDULED FOR</label><input type="datetime-local" value={d.scheduled_for ? d.scheduled_for.slice(0, 16) : ""} onChange={(e) => setD({ ...d, scheduled_for: e.target.value ? new Date(e.target.value).toISOString() : "" })}/></div>
         <div><label className="overline">// A-LA-CARTE CENTS</label><input type="number" value={d.alacarte_price_cents ?? ""} onChange={(e) => setD({ ...d, alacarte_price_cents: e.target.value })} placeholder="2700 = $27"/></div>
@@ -453,7 +487,7 @@ function Summary() {
         </div>
       </div>
       <h3 className="font-display text-2xl text-cream mt-10 mb-4">Sent / scheduled</h3>
-      <div className="space-y-2">{list.map((s) => (<div key={s.id} className="panel p-4"><div className="overline">{s.sent ? `SENT ${fmt.datetime(s.sent_at)}` : "DRAFT"}</div><div className="text-cream mt-2">{s.matters.join(" \u00b7 ")}</div></div>))}</div>
+      <div className="space-y-2">{list.map((s) => (<div key={s.id} className="panel p-4"><div className="overline">{s.sent ? `SENT ${fmt.datetime(s.sent_at)}` : "DRAFT"}</div><div className="text-cream mt-2">{s.matters.join(" · ")}</div></div>))}</div>
     </div>
   );
 }
@@ -598,7 +632,8 @@ function LaunchPanel() {
   };
   const triggerWB = async () => { await api.post("/admin/trigger-winback"); toast.success("Win-back swept"); };
   const triggerDrops = async () => { await api.post("/admin/trigger-drops"); toast.success("Drops swept"); };
-  const regen = async () => { await api.post("/admin/regenerate-pdf"); toast.success("PDF regenerated"); };
+  const regen = async () => { await api.post("/admin/regenerate-pdf"); toast.success("Activation Codes PDF regenerated"); };
+  const regenBook = async () => { await api.post("/admin/regenerate-welcome-book"); toast.success("Welcome book PDF regenerated"); };
   if (!state) return null;
   return (
     <div className="space-y-6">
@@ -610,11 +645,241 @@ function LaunchPanel() {
           <><h2 className="font-display text-3xl text-cream">Not launched yet</h2><button onClick={launch} className="btn-gold mt-6"><Rocket className="w-4 h-4"/> Press LAUNCH</button></>
         )}
       </div>
-      <div className="grid md:grid-cols-3 gap-4">
-        <div className="panel p-5"><h3 className="font-display text-xl text-cream mb-2">Sweep scheduled drops</h3><button onClick={triggerDrops} className="btn-ghost mt-3 text-xs">Run now</button></div>
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="panel p-5"><h3 className="font-display text-xl text-cream mb-2">Sweep scheduled drops & articles</h3><button onClick={triggerDrops} className="btn-ghost mt-3 text-xs">Run now</button></div>
         <div className="panel p-5"><h3 className="font-display text-xl text-cream mb-2">Trigger win-back</h3><button onClick={triggerWB} className="btn-ghost mt-3 text-xs">Run now</button></div>
-        <div className="panel p-5"><h3 className="font-display text-xl text-cream mb-2">Regenerate PDF</h3><button onClick={regen} className="btn-ghost mt-3 text-xs">Regenerate</button></div>
+        <div className="panel p-5"><h3 className="font-display text-xl text-cream mb-2">Regenerate Activation Codes PDF</h3><button onClick={regen} className="btn-ghost mt-3 text-xs">Regenerate</button></div>
+        <div className="panel p-5"><h3 className="font-display text-xl text-cream mb-2">Regenerate Welcome Book PDF</h3><p className="text-textMuted text-xs">"Dominion Over Mammon & The Spirit of Delay"</p><button onClick={regenBook} className="btn-ghost mt-3 text-xs">Regenerate</button></div>
       </div>
     </div>
   );
 }
+
+/* ----------------- TESTIMONIALS ADMIN ----------------- */
+function TestimonialsAdmin() {
+  const [items, setItems] = useState([]);
+  const load = () => api.get("/admin/testimonials").then((r) => setItems(r.data.testimonials));
+  useEffect(() => { load(); }, []);
+  const moderate = async (id, status) => { await api.patch(`/admin/testimonials/${id}`, { status }); toast.success(status); load(); };
+  return (
+    <div>
+      <div className="overline mb-3">// {items.length} testimonials · {items.filter(t => t.status === "pending").length} pending</div>
+      <div className="space-y-3">
+        {items.map((t) => (
+          <div key={t.id} data-testid={`adm-test-${t.id}`} className="panel p-5">
+            <div className="overline mb-2">{t.status?.toUpperCase()} · {fmt.datetime(t.created_at)}</div>
+            {t.headline && <div className="font-display text-xl text-gold">"{t.headline}"</div>}
+            <p className="text-cream/90 whitespace-pre-wrap mt-2">{t.body}</p>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => moderate(t.id, "approved")} className="btn-ghost text-xs">Approve</button>
+              <button onClick={() => moderate(t.id, "featured")} className="btn-gold text-xs">Feature</button>
+              <button onClick={() => moderate(t.id, "rejected")} className="btn-ghost text-xs !border-ruby !text-ruby">Reject</button>
+              <a href={`/u/${t.user_id}`} target="_blank" rel="noreferrer" className="overline self-center ml-2">from {t.user_name} →</a>
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && <p className="text-textMuted">No testimonials yet.</p>}
+      </div>
+    </div>
+  );
+}
+
+/* ----------------- AD COPY GENERATOR ----------------- */
+function AdCopyTab() {
+  const [type, setType] = useState("drop");
+  const [items, setItems] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [variants, setVariants] = useState([]);
+  const [publicFlag, setPublicFlag] = useState(true);
+  useEffect(() => {
+    const ep = type === "drop" ? "/admin/drops" : "/admin/articles";
+    api.get(ep).then((r) => setItems(type === "drop" ? r.data.drops : r.data.articles));
+    setSelected(null); setVariants([]);
+  }, [type]);
+  const generate = async () => {
+    if (!selected) return;
+    const ep = type === "drop" ? `/admin/ad-copy/drop/${selected.id}` : `/admin/ad-copy/article/${selected.id}`;
+    const { data } = await api.post(ep, { public: publicFlag });
+    setVariants(data.variants);
+  };
+  const copy = (t) => { navigator.clipboard.writeText(t); toast.success("Copied"); };
+  return (
+    <div>
+      <div className="overline mb-3">// AD COPY GENERATOR · FB / IG / X / EMAIL READY</div>
+      <p className="text-textMuted text-sm mb-6">Pick any drop or article. We'll surface 5 high-converting copy variants you can paste straight into your group, socials, or DMs.</p>
+      <div className="flex gap-3 mb-4">
+        <button onClick={() => setType("drop")} className={type === "drop" ? "btn-gold" : "btn-ghost"}>Drops</button>
+        <button onClick={() => setType("article")} className={type === "article" ? "btn-gold" : "btn-ghost"}>Articles</button>
+        <label className="flex items-center gap-2 text-sm text-textMuted ml-auto"><input type="checkbox" checked={publicFlag} onChange={(e) => setPublicFlag(e.target.checked)} style={{width:16,height:16}}/>Public funnel angle</label>
+      </div>
+      <div className="grid md:grid-cols-3 gap-4">
+        <div className="space-y-2 md:col-span-1">
+          {items.map((d) => (
+            <button key={d.id} data-testid={`adcopy-pick-${d.id}`} onClick={() => setSelected(d)} className={`block w-full text-left panel p-3 ${selected?.id === d.id ? "border-gold" : ""}`}>
+              <div className="text-cream">{d.title}</div>
+              <div className="overline mt-1">{d.published ? "PUBLISHED" : "DRAFT"}</div>
+            </button>
+          ))}
+        </div>
+        <div className="md:col-span-2 space-y-3">
+          {selected ? (
+            <>
+              <button onClick={generate} className="btn-gold">Generate 5 variants</button>
+              {variants.map((v, i) => (
+                <div key={i} className="panel p-4">
+                  <div className="overline mb-2">{v.platform}</div>
+                  <pre className="whitespace-pre-wrap text-cream/95 text-sm font-body">{v.copy}</pre>
+                  <button onClick={() => copy(v.copy)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/>Copy</button>
+                </div>
+              ))}
+            </>
+          ) : <p className="text-textMuted text-sm">Pick a {type} on the left.</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------- STEWARD OF STEWARDS ----------------- */
+function StewardOfStewards() {
+  const [data, setData] = useState({ leaders: [], total: 0, total_payout_cents: 0 });
+  useEffect(() => { api.get("/admin/members").then((r) => {
+    const list = (r.data.members || []).filter((m) => (m.affiliate_earnings_cents || 0) > 0)
+      .sort((a, b) => (b.affiliate_earnings_cents||0) - (a.affiliate_earnings_cents||0));
+    setData({ leaders: list, total: list.length, total_payout_cents: list.reduce((s, m) => s + (m.affiliate_earnings_cents||0), 0) });
+  }); }, []);
+  return (
+    <div>
+      <div className="overline mb-3">// STEWARD OF STEWARDS · SUPPORT THE STEWARDS WHO SOW</div>
+      <h2 className="font-display text-3xl text-cream">Lead the multipliers.</h2>
+      <p className="text-textMuted mt-2 max-w-3xl">These are the members already bringing others through. Reach out personally — a one-line DM to your top stewards each week compounds faster than any ad spend.</p>
+      <div className="grid sm:grid-cols-3 gap-px bg-borderGold mt-6">
+        <div className="bg-void p-5"><div className="overline">// ACTIVE STEWARDS</div><div className="font-display text-4xl text-cream">{data.total}</div></div>
+        <div className="bg-void p-5"><div className="overline">// TOTAL PAID OUT</div><div className="font-display text-4xl text-cream">{fmt.money(data.total_payout_cents)}</div></div>
+        <div className="bg-void p-5"><div className="overline">// THIS WEEK'S ACTION</div><div className="text-cream mt-2">Send the top 3 stewards a personal voice note. Ask: "What's the next piece you wish you had to share?" Then build it.</div></div>
+      </div>
+      <h3 className="font-display text-2xl text-cream mt-10 mb-4">Leaderboard</h3>
+      <div className="space-y-2">
+        {data.leaders.map((m, i) => (
+          <div key={m.id} className="panel p-4 flex items-center gap-4">
+            <div className="font-display text-3xl text-gold w-10">#{i+1}</div>
+            <div className="w-10 h-10 border border-borderGold bg-surface overflow-hidden">
+              {m.avatar_url ? <img src={m.avatar_url} alt="" className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center font-display text-gold">{(m.name||"?")[0]}</div>}
+            </div>
+            <div className="flex-1">
+              <div className="text-cream font-medium">{m.name}</div>
+              <div className="text-xs font-mono text-textDim">{m.email}</div>
+            </div>
+            <div className="text-right">
+              <div className="font-display text-2xl text-gold">{fmt.money(m.affiliate_earnings_cents||0)}</div>
+              <a href={`/dm/${m.id}`} className="overline hover:text-gold">Send DM →</a>
+            </div>
+          </div>
+        ))}
+        {data.leaders.length === 0 && <p className="text-textMuted">No stewardships have generated payouts yet.</p>}
+      </div>
+      <div className="panel p-6 mt-10">
+        <div className="overline mb-3">// WEEKLY PLAYBOOK</div>
+        <ol className="space-y-2 text-cream/90">
+          <li>1. DM your top 3 stewards. Thank them by name.</li>
+          <li>2. Send them ONE ad-copy variant they can post today (from the Ad Copy tab).</li>
+          <li>3. Tell them the next drop / article coming so they can pre-warm their list.</li>
+          <li>4. Feature one steward's testimony as social proof this week.</li>
+          <li>5. If a steward is near a milestone ($100, $500, $1k), call them.</li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------- BRAND ----------------- */
+function BrandTab() {
+  const [b, setB] = useState(null);
+  useEffect(() => { api.get("/public/brand").then((r) => setB(r.data)); }, []);
+  if (!b) return null;
+  const save = async () => { await api.post("/admin/brand", b); toast.success("Brand saved · refresh to apply"); };
+  const field = (k, label, type = "text") => (
+    <div><label className="overline">{label}</label><input type={type} value={b[k] || ""} onChange={(e) => setB({ ...b, [k]: e.target.value })}/></div>
+  );
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <div className="overline">// BRAND · APPLIED SITE-WIDE</div>
+      {field("site_name", "// SITE NAME")}
+      {field("tagline", "// TAGLINE")}
+      <div className="grid sm:grid-cols-2 gap-5">
+        {field("primary_hex", "// PRIMARY (gold)")}
+        {field("primary_hi_hex", "// PRIMARY HI")}
+        {field("ink_hex", "// TEXT (cream)")}
+        {field("bg_hex", "// BACKGROUND")}
+        {field("surface_hex", "// SURFACE")}
+        {field("border_hex", "// BORDER")}
+      </div>
+      <div className="grid sm:grid-cols-3 gap-5">
+        {field("display_font", "// DISPLAY FONT")}
+        {field("body_font", "// BODY FONT")}
+        {field("mono_font", "// MONO FONT")}
+      </div>
+      {field("logo_url", "// LOGO URL (optional)")}
+      <button data-testid="brand-save" onClick={save} className="btn-gold">Save brand</button>
+      <p className="text-textDim text-xs font-mono">Colors update live on the site. Some changes (fonts) take effect on next reload.</p>
+    </div>
+  );
+}
+
+/* ----------------- PRICING ----------------- */
+function PricingTab() {
+  const [p, setP] = useState(null);
+  useEffect(() => { api.get("/admin/pricing").then((r) => setP(r.data)); }, []);
+  if (!p) return null;
+  const save = async () => { await api.post("/admin/pricing", p); toast.success("Pricing saved"); };
+  return (
+    <div className="space-y-5 max-w-2xl">
+      <div className="overline">// PRICING & OFFER VISIBILITY</div>
+      <div><label className="overline">// FULL MONTHLY (cents)</label><input type="number" value={p.full_monthly_cents} onChange={(e) => setP({ ...p, full_monthly_cents: Number(e.target.value) })}/></div>
+      <div><label className="overline">// AFTER-PROMO MONTHLY (cents)</label><input type="number" value={p.full_after_promo_monthly_cents} onChange={(e) => setP({ ...p, full_after_promo_monthly_cents: Number(e.target.value) })}/></div>
+      <div><label className="overline">// ANNUAL (cents)</label><input type="number" value={p.full_annual_cents} onChange={(e) => setP({ ...p, full_annual_cents: Number(e.target.value) })}/></div>
+      <div><label className="overline">// FOUNDATIONAL MONTHLY (cents)</label><input type="number" value={p.foundational_monthly_cents} onChange={(e) => setP({ ...p, foundational_monthly_cents: Number(e.target.value) })}/></div>
+      <div><label className="overline">// PROMO DAYS</label><input type="number" value={p.promo_days} onChange={(e) => setP({ ...p, promo_days: Number(e.target.value) })}/></div>
+      <div><label className="overline">// MEMBERSHIP CAP</label><input type="number" value={p.cap} onChange={(e) => setP({ ...p, cap: Number(e.target.value) })}/></div>
+      <label className="flex items-center gap-2 text-sm text-textMuted"><input type="checkbox" checked={!!p.show_foundational_publicly} onChange={(e) => setP({ ...p, show_foundational_publicly: e.target.checked })} style={{width:16,height:16}}/>Show $11 Foundational publicly on /pricing</label>
+      <button data-testid="pricing-save" onClick={save} className="btn-gold">Save pricing</button>
+    </div>
+  );
+}
+
+/* ----------------- NOTIF PREFS ----------------- */
+function NotifPrefsTab() {
+  const [p, setP] = useState(null);
+  useEffect(() => { api.get("/me/notif-prefs").then((r) => setP(r.data.prefs)); }, []);
+  if (!p) return null;
+  const save = async () => { await api.patch("/me/notif-prefs", p); toast.success("Saved"); };
+  const tog = (k, label, desc) => (
+    <label className="block panel p-4 cursor-pointer">
+      <div className="flex items-center justify-between gap-4">
+        <div><div className="text-cream">{label}</div><div className="text-xs font-mono text-textDim mt-1">{desc}</div></div>
+        <input type="checkbox" checked={!!p[k]} onChange={(e) => setP({ ...p, [k]: e.target.checked })} style={{width:20,height:20}}/>
+      </div>
+    </label>
+  );
+  return (
+    <div className="space-y-3 max-w-2xl">
+      <div className="overline">// EMAIL ME WHEN…</div>
+      {tog("admin_on_signup", "A new person signs up", "Catches them at the warmest moment. Send a personal welcome.")}
+      {tog("admin_on_purchase", "Someone joins (paid)", "Money just hit. Celebrate it and send them a personal note.")}
+      {tog("admin_on_cancel", "Someone cancels", "Reach out personally — sometimes it's just a season.")}
+      {tog("admin_on_testimonial", "A testimonial is submitted", "Approve and feature within 24 hours.")}
+      {tog("admin_on_payment_failed", "A payment fails", "You may want to DM them while Stripe auto-retries.")}
+      {tog("admin_on_lead", "A blog lead opts in", "Useful when running ads. Off by default.")}
+      {tog("admin_on_post", "A community post is made", "Useful at launch, off as it grows.")}
+      <div className="overline mt-6">// DIGEST FREQUENCY</div>
+      <select value={p.admin_digest_frequency} onChange={(e) => setP({ ...p, admin_digest_frequency: e.target.value })}>
+        <option value="instant">Instant (every event)</option>
+        <option value="hourly">Hourly rollup</option>
+        <option value="daily">Daily digest (recommended)</option>
+        <option value="off">Off — no emails to me</option>
+      </select>
+      <button data-testid="notif-save" onClick={save} className="btn-gold">Save preferences</button>
+    </div>
+  );
+}
+

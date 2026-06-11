@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Crown, LogOut, Menu, X, Compass, Users, BookOpen, Bookmark, Sparkles, Settings as SettingsIcon, CreditCard, Hourglass } from "lucide-react";
+import { Crown, LogOut, Menu, X, Compass, Users, BookOpen, Bookmark, Sparkles, Settings as SettingsIcon, CreditCard, Hourglass, MessageCircle } from "lucide-react";
 import { useAuth } from "../lib/auth";
 
 export default function Shell({ children }) {
@@ -17,10 +17,9 @@ export default function Shell({ children }) {
     { to: "/drops", label: "Drops", icon: Sparkles },
     { to: "/vault", label: "Vault", icon: BookOpen },
     { to: "/community", label: "Community", icon: Users },
+    { to: "/dm", label: "Messages", icon: MessageCircle },
     { to: "/notes", label: "Notes", icon: BookOpen },
-    { to: "/bookmarks", label: "Bookmarks", icon: Bookmark },
-    { to: "/affiliate", label: "Affiliate", icon: Crown },
-    { to: "/billing", label: "Billing", icon: CreditCard },
+    { to: "/stewardship", label: "Stewardship", icon: Crown },
     { to: "/profile", label: "Profile", icon: Compass },
   ];
   const adminLink = { to: "/admin", label: "Admin", icon: SettingsIcon };
@@ -62,6 +61,7 @@ export default function Shell({ children }) {
             ) : (
               <>
                 <Link to="/blog" data-testid="nav-blog" className="px-4 py-2 text-xs tracking-[0.2em] uppercase font-mono text-textMuted hover:text-cream">Blog</Link>
+                <Link to="/testimonials" data-testid="nav-testimonies" className="px-4 py-2 text-xs tracking-[0.2em] uppercase font-mono text-textMuted hover:text-cream">Testimonies</Link>
                 <Link to="/about" data-testid="nav-about" className="px-4 py-2 text-xs tracking-[0.2em] uppercase font-mono text-textMuted hover:text-cream">Manifesto</Link>
                 <Link to="/pricing" data-testid="nav-pricing" className="px-4 py-2 text-xs tracking-[0.2em] uppercase font-mono text-textMuted hover:text-cream">Pricing</Link>
                 <Link to="/login" data-testid="nav-login" className="px-4 py-2 text-xs tracking-[0.2em] uppercase font-mono text-textMuted hover:text-cream">Sign in</Link>

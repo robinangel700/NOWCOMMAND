@@ -11,7 +11,7 @@ def _onboarding(ctx: Dict) -> Tuple[str, str]:
     fe = ctx.get("frontend", "")
     name = (ctx.get("name") or "Sovereign").split(" ")[0]
     return (
-        "Welcome to NOWREALM \u2014 your Activation Codes are inside",
+        "Welcome to NOWREALM — your Activation Codes are inside",
         wrap_html(
             f"You crossed the threshold, {name}.",
             "<p>Your seat in NOWREALM is active. <strong>The Mammon Breaker Activation Codes</strong> is attached to this email and also waiting in your dashboard.</p>"
@@ -20,7 +20,7 @@ def _onboarding(ctx: Dict) -> Tuple[str, str]:
             "<li>Download and read the Activation Codes once tonight.</li>"
             "<li>Open the Community Vault and read the One Page Manifesto.</li>"
             "<li>Set your profile (avatar, bio) so the community knows who just walked in.</li>"
-            "<li>Post one sentence in the Weekly Biggest Win thread \u2014 even &lsquo;I showed up&rsquo; counts.</li>"
+            "<li>Post one sentence in the Weekly Biggest Win thread — even &lsquo;I showed up&rsquo; counts.</li>"
             "<li>Wednesday's drop is already scheduled. Watch the dashboard.</li>"
             "</ol>"
             "<p style='margin-top:24px'>You are not subscribing. You are crossing a threshold.</p>",
@@ -34,7 +34,7 @@ def _winback(ctx: Dict) -> Tuple[str, str]:
     fe = ctx.get("frontend", "")
     topic = ctx.get("topic", "your dominion work")
     return (
-        "I noticed you stepped away \u2014 a 2-minute shortcut",
+        "I noticed you stepped away — a 2-minute shortcut",
         wrap_html(
             "I noticed you stepped away",
             f"<p>I saw you were working on <strong>{topic}</strong> recently.</p>"
@@ -50,7 +50,7 @@ def _winback(ctx: Dict) -> Tuple[str, str]:
 def _payment_failed(ctx: Dict) -> Tuple[str, str]:
     fe = ctx.get("frontend", "")
     return (
-        "Payment hiccup \u2014 NOWREALM auto-retry scheduled",
+        "Payment hiccup — NOWREALM auto-retry scheduled",
         wrap_html(
             "A small detour, no breach.",
             "<p>Your last NOWREALM payment didn't go through. Stripe will retry automatically over the next several days.</p>"
@@ -127,7 +127,7 @@ def _monthly_summary(ctx: Dict) -> Tuple[str, str]:
     matters = "".join(f"<li>{m}</li>" for m in ctx.get("matters", []))
     ignore = "".join(f"<li>{i}</li>" for i in ctx.get("ignore", []))
     return (
-        "NOWREALM \u2014 Executive Summary",
+        "NOWREALM — Executive Summary",
         wrap_html(
             "Monthly Executive Summary",
             f"<h3 style='color:#D4AF37;font-family:Cormorant Garamond,serif'>What matters right now</h3><ul>{matters}</ul>"
@@ -154,7 +154,7 @@ def _waitlist(ctx: Dict) -> Tuple[str, str]:
 def _lead_optin(ctx: Dict) -> Tuple[str, str]:
     fe = ctx.get("frontend", "")
     return (
-        "Welcome to the NOWREALM list \u2014 your first transmission",
+        "Welcome to the NOWREALM list — your first transmission",
         wrap_html(
             "Welcome to the list",
             "<p>You just put your name on the wall.</p>"
@@ -171,10 +171,10 @@ def _affiliate_payout(ctx: Dict) -> Tuple[str, str]:
     amount = ctx.get("amount", "$22.00")
     referred = ctx.get("referred", "a new sovereign")
     return (
-        "Affiliate credit \u2014 you just earned " + amount,
+        "Affiliate credit — you just earned " + amount,
         wrap_html(
             "A new sovereign came through you",
-            f"<p>{referred} just crossed the threshold using your link. You earned <strong>{amount}</strong> \u2014 50% share, credited to your account.</p>",
+            f"<p>{referred} just crossed the threshold using your link. You earned <strong>{amount}</strong> — 50% share, credited to your account.</p>",
             cta_url=f"{fe}/affiliate",
             cta_label="See your affiliate dashboard",
         ),
@@ -242,7 +242,7 @@ TEMPLATES: Dict[str, Dict] = {
     },
     "article_published": {
         "label": "New blog article",
-        "trigger": "Sent when an article is published (free \u2192 to leads + members, vault \u2192 to members).",
+        "trigger": "Sent when an article is published (free → to leads + members, vault → to members).",
         "fn": _article_published,
         "variables": ["title", "excerpt", "slug", "vault", "frontend"],
     },

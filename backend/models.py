@@ -39,19 +39,15 @@ class DropIn(BaseModel):
     quick_win: bool = False  # under 15 min
     alacarte_price_cents: Optional[int] = None  # if set => a-la-carte sale required
     tags: List[str] = []
+    youtube_url: Optional[str] = None
+    transcript_md: Optional[str] = None
+    related_links: List[dict] = []  # [{title, url}]
+    community_announcement: Optional[str] = None
 
 
-class DropUpdate(BaseModel):
-    title: Optional[str] = None
-    body_md: Optional[str] = None
-    media_url: Optional[str] = None
-    foundational: Optional[bool] = None
-    scheduled_for: Optional[str] = None
-    insight_preview: Optional[str] = None
-    quick_win: Optional[bool] = None
-    alacarte_price_cents: Optional[int] = None
-    tags: Optional[List[str]] = None
-    published: Optional[bool] = None
+class DropUpdateLegacy(BaseModel):
+    """Kept for compatibility; new DropUpdate above superseded it."""
+    pass
 
 
 class PostIn(BaseModel):
@@ -173,7 +169,7 @@ class ProfileIn(BaseModel):
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
     cover_image_url: Optional[str] = None
-    pronouns: Optional[str] = None
+    cover_position_y: Optional[int] = None
     location: Optional[str] = None
     website: Optional[str] = None
     setup_completed: Optional[bool] = None
@@ -181,4 +177,83 @@ class ProfileIn(BaseModel):
 
 class EmailTemplateUpdate(BaseModel):
     subject_override: Optional[str] = None
-    html_override: Optional[str] = None  # if set, replaces default body
+    html_override: Optional[str] = None
+
+
+class BrandIn(BaseModel):
+    site_name: Optional[str] = None
+    tagline: Optional[str] = None
+    primary_hex: Optional[str] = None      # gold
+    primary_hi_hex: Optional[str] = None
+    ink_hex: Optional[str] = None          # cream / text
+    bg_hex: Optional[str] = None           # void / background
+    surface_hex: Optional[str] = None
+    border_hex: Optional[str] = None
+    display_font: Optional[str] = None
+    body_font: Optional[str] = None
+    mono_font: Optional[str] = None
+    logo_url: Optional[str] = None
+
+
+class PricingIn(BaseModel):
+    full_monthly_cents: Optional[int] = None
+    full_annual_cents: Optional[int] = None
+    foundational_monthly_cents: Optional[int] = None
+    full_after_promo_monthly_cents: Optional[int] = None
+    promo_days: Optional[int] = None
+    cap: Optional[int] = None
+    show_foundational_publicly: Optional[bool] = None
+
+
+class TestimonialIn(BaseModel):
+    body: str
+    headline: Optional[str] = None
+
+
+class TestimonialModerate(BaseModel):
+    status: Literal["pending", "approved", "featured", "rejected"]
+    headline: Optional[str] = None
+    body: Optional[str] = None
+
+
+class DropCommentIn(BaseModel):
+    body: str
+    cross_post_to_community: bool = True
+
+
+class DMSendIn(BaseModel):
+    recipient_id: str
+    body: str
+
+
+class NotifPrefsIn(BaseModel):
+    # admin prefs
+    admin_on_signup: Optional[bool] = None
+    admin_on_purchase: Optional[bool] = None
+    admin_on_cancel: Optional[bool] = None
+    admin_on_post: Optional[bool] = None
+    admin_on_testimonial: Optional[bool] = None
+    admin_on_lead: Optional[bool] = None
+    admin_on_payment_failed: Optional[bool] = None
+    admin_digest_frequency: Optional[Literal["instant", "hourly", "daily", "off"]] = None
+    # member prefs
+    member_daily_digest: Optional[bool] = None
+    member_drop_announcement: Optional[bool] = None
+    member_dm_notify: Optional[bool] = None
+
+
+class DropUpdate(BaseModel):
+    title: Optional[str] = None
+    body_md: Optional[str] = None
+    media_url: Optional[str] = None
+    foundational: Optional[bool] = None
+    scheduled_for: Optional[str] = None
+    insight_preview: Optional[str] = None
+    quick_win: Optional[bool] = None
+    alacarte_price_cents: Optional[int] = None
+    tags: Optional[List[str]] = None
+    published: Optional[bool] = None
+    youtube_url: Optional[str] = None
+    transcript_md: Optional[str] = None
+    related_links: Optional[List[dict]] = None
+    community_announcement: Optional[str] = None

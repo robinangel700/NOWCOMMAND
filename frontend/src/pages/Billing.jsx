@@ -14,7 +14,7 @@ const LOST_LIST = [
   "Quizzes, learning paths, and the archive of what you've completed",
   "Future quick-win assets and monthly executive summaries",
   "Your Activation Codes downloads will be revoked",
-  "The founder $44/mo lock if you ever come back \u2014 you'll re-enter at the new tier",
+  "The founder $44/mo lock if you ever come back — you'll re-enter at the new tier",
 ];
 
 export default function Billing() {
@@ -85,7 +85,7 @@ export default function Billing() {
             <div className="panel p-6">
               <ArrowDownCircle className="w-5 h-5 text-gold mb-3"/>
               <h3 className="font-display text-2xl text-cream">Need a softer step?</h3>
-              <p className="text-textMuted text-sm mt-2">If full membership is too much right now, you don't have to leave. The cancel flow gives you the option to step down to Foundational ($11/mo) instead \u2014 keep the codes, skip the community.</p>
+              <p className="text-textMuted text-sm mt-2">If full membership is too much right now, you don't have to leave. The cancel flow gives you the option to step down to Foundational ($11/mo) instead — keep the codes, skip the community.</p>
             </div>
           )}
           <div className="panel p-6 border-ruby/40">
@@ -118,7 +118,7 @@ export default function Billing() {
                 {tier === "full" && (
                   <div className="w-full mt-4 p-4 border border-borderGold bg-surface">
                     <div className="overline mb-2">// SOFTER LANDING</div>
-                    <p className="text-cream/90 mb-3">Before you go entirely \u2014 you can step down to <strong className="text-gold">Foundational ($11/mo)</strong> and keep the codes, the activation PDF, your notes, and the foundational drops. You'll lose community + premium drops, but you stay in the realm.</p>
+                    <p className="text-cream/90 mb-3">Before you go entirely — you can step down to <strong className="text-gold">Foundational ($11/mo)</strong> and keep the codes, the activation PDF, your notes, and the foundational drops. You'll lose community + premium drops, but you stay in the realm.</p>
                     <button data-testid="cancel-downgrade-instead" onClick={downgrade} disabled={busy} className="btn-ghost">Switch to $11 Foundational</button>
                   </div>
                 )}

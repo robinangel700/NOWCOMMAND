@@ -9,7 +9,7 @@ export function BlogIndex() {
   const [email, setEmail] = useState("");
   useEffect(() => {
     api.get("/public/articles").then((r) => setData(r.data));
-    document.title = "NOWREALM \u2014 Blog: Money, Time & Divine Timing";
+    document.title = "NOWREALM — Blog: Money, Time & Divine Timing";
   }, []);
   const optin = async (e) => {
     e.preventDefault();
