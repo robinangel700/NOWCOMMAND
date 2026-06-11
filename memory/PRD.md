@@ -53,3 +53,19 @@ $44/mo or $500/yr auto-renew Stripe membership (goal 300 members), Wednesday dro
 ## Status
 - Backend pytest: 35/35 pass + 1 documented xfail
 - Frontend smoke: landing/pricing/signup/login/admin all green
+
+## Fork session (Jun 11, 2026) — Phase 4 logic completed
+- **Pricing → Stripe sync**: Admin price changes (`/admin/pricing`) now flow into `/public/state`, all new checkouts (via inline `price_data`), and the downgrade flow. With a real key, `stripe_service.sync_catalog()` also materializes a Product + recurring Prices in the Stripe catalog (returned as `stripe_sync`). New-signups-only; existing subscribers keep their locked rate. Single source of truth = `_resolve_pricing()`.
+- **SECURITY (important)**: A LIVE Stripe key (`sk_live_...`) was found in `backend/.env`. Replaced with the safe pod TEST key to prevent real charges in preview. **User must still ROTATE the exposed live key in their Stripe Dashboard.**
+- **Dominion Library**: book + audiobook with forthcoming→auto-unlock. `GET /dominion` (member), `GET/POST /admin/dominion`, `POST /upload/file` (admin, pdf/audio). Dashboard card + Admin manager (Launch tab). Book ships available (generated PDF fallback); audiobook forthcoming until URL set.
+- **Gamification badges**: `GET /me/badges` computes 13 achievements from real activity (notes, quizzes, posts, wins, referrals, days-as-member). Rendered as "Marks of the Steward" on the dashboard.
+- **Testimonials with images**: `image_url` added to submit/moderate; image upload + display on /testimonials and admin moderation. Form now also available to admin.
+- **Affiliate Sales Wizard**: enhanced live wizard in Stewardship (frame→audience→hook→dm→objections→follow-up→armed) with copy buttons + payout-milestone tracker.
+- **Creator Identity course**: progress now persists server-side (`GET/PATCH /admin/identity-progress`).
+- Saturday drop cadence: copy already reflects Saturday across FAQ/checklist/health/dashboard.
+- Tests: `backend/tests/test_phase4.py` 9/9 pass; frontend testing agent iteration_4 — 7/7 flows pass.
+
+## Backlog (still open)
+- P2: Refactor `server.py` (~2350 lines) into modular routers (auth/admin/community/drops/billing).
+- P2: Split `Admin.jsx` into sub-components.
+- P1: Quiz/learning-path authoring UI in admin (currently API-only).

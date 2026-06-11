@@ -56,7 +56,7 @@ export default function Testimonials() {
           {items.length === 0 && <div className="bg-void p-10 col-span-full text-textMuted">No testimonies yet — be the first to share yours below.</div>}
         </div>
 
-        {user?.tier === "full" || user?.tier === "foundational" ? (
+        {user?.tier === "full" || user?.tier === "foundational" || user?.role === "admin" ? (
           <form onSubmit={submit} className="mt-16 panel p-6 md:p-8" data-testid="testimony-form">
             <div className="overline mb-2">// SHARE YOUR WIN</div>
             <h3 className="font-display text-3xl text-cream">Tell us what shifted.</h3>
