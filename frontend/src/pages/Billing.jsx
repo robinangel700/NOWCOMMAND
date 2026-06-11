@@ -81,12 +81,11 @@ export default function Billing() {
               <button data-testid="resume-btn" onClick={resume} disabled={busy} className="btn-gold mt-4">Resume membership</button>
             </div>
           )}
-          {tier === "full" && (
+          {tier === "full" && !user?.paused && (
             <div className="panel p-6">
               <ArrowDownCircle className="w-5 h-5 text-gold mb-3"/>
-              <h3 className="font-display text-2xl text-cream">Downgrade to Foundational</h3>
-              <p className="text-textMuted text-sm mt-2">Keep the foundational content for $11/mo. You'll lose access to community and premium drops.</p>
-              <button data-testid="downgrade-btn" onClick={downgrade} disabled={busy} className="btn-ghost mt-4">Switch to Foundational</button>
+              <h3 className="font-display text-2xl text-cream">Need a softer step?</h3>
+              <p className="text-textMuted text-sm mt-2">If full membership is too much right now, you don't have to leave. The cancel flow gives you the option to step down to Foundational ($11/mo) instead \u2014 keep the codes, skip the community.</p>
             </div>
           )}
           <div className="panel p-6 border-ruby/40">
@@ -116,7 +115,13 @@ export default function Billing() {
               <div className="mt-6 flex flex-wrap gap-3">
                 <button data-testid="cancel-stay" onClick={() => setStage("idle")} className="btn-gold">Keep my seat</button>
                 <button data-testid="cancel-pause-instead" onClick={pause} disabled={busy} className="btn-ghost">Pause instead</button>
-                {tier === "full" && <button data-testid="cancel-downgrade-instead" onClick={downgrade} disabled={busy} className="btn-ghost">Downgrade to $11</button>}
+                {tier === "full" && (
+                  <div className="w-full mt-4 p-4 border border-borderGold bg-surface">
+                    <div className="overline mb-2">// SOFTER LANDING</div>
+                    <p className="text-cream/90 mb-3">Before you go entirely \u2014 you can step down to <strong className="text-gold">Foundational ($11/mo)</strong> and keep the codes, the activation PDF, your notes, and the foundational drops. You'll lose community + premium drops, but you stay in the realm.</p>
+                    <button data-testid="cancel-downgrade-instead" onClick={downgrade} disabled={busy} className="btn-ghost">Switch to $11 Foundational</button>
+                  </div>
+                )}
                 <button data-testid="cancel-final" onClick={cancel} disabled={busy} className="btn-ghost !border-ruby !text-ruby">Cancel anyway</button>
               </div>
             </div>

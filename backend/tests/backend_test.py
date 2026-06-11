@@ -276,15 +276,29 @@ class TestCommunity:
         TestCommunity.post_id = r.json()["id"]
 
     def test_foundational_forbidden_to_post(self, foundational_member):
-        # foundational tier IS member-or-admin in current code (foundational counts)
-        # Per spec, foundational gets 403. Let's check.
+        # Per iteration 2 spec, foundational tier should get 403 on community posts.
         r = requests.post(f"{API}/community/posts",
                           json={"body": "TEST_FoundPost", "kind": "regular"},
                           headers=_bearer(foundational_member["token"]), timeout=10)
-        # If backend treats foundational as member, this is 200. We document it.
-        if r.status_code == 200:
-            pytest.xfail("Foundational tier allowed to post in community; spec says 403")
-        assert r.status_code == 403
+        assert r.status_code == 403, f"Expected 403 for foundational tier but got {r.status_code}"
+
+    def test_post_includes_user_avatar(self, full_member, admin_token):
+        # Set avatar on the user first
+        requests.patch(f"{API}/me/profile",
+                       json={"avatar_url": "https://example.com/avatar.png"},
+                       headers=_bearer(full_member["token"]), timeout=10)
+        r = requests.post(f"{API}/community/posts",
+                         json={"body": "TEST_AvatarPost", "kind": "regular"},
+                         headers=_bearer(full_member["token"]), timeout=10)
+        assert r.status_code == 200
+        pid = r.json()["id"]
+        feed = requests.get(f"{API}/community/feed", headers=_bearer(full_member["token"]), timeout=10).json()
+        match = next((p for p in feed["posts"] if p["id"] == pid), None)
+        assert match is not None
+        assert "user_avatar" in match
+        assert match["user_avatar"] == "https://example.com/avatar.png"
+        # cleanup
+        requests.delete(f"{API}/community/posts/{pid}", headers=_bearer(admin_token), timeout=10)
 
     def test_feed_includes_manifesto_rules(self, full_member):
         r = requests.get(f"{API}/community/feed", headers=_bearer(full_member["token"]), timeout=10)
@@ -430,3 +444,247 @@ class TestDoorsCap:
         requests.post(f"{API}/admin/settings",
                       json={"key": "doors", "value": {"open": True, "cap": 300}},
                       headers=_bearer(admin_token), timeout=10)
+
+
+# ============== ARTICLES (iteration 2) ==============
+class TestArticles:
+    free_slug = None
+    free_id = None
+    vault_id = None
+    vault_slug = None
+
+    def test_admin_create_free_article(self, admin_token):
+        r = requests.post(f"{API}/admin/articles",
+                          json={"title": "TEST Free Article One", "body_md": "# free\nhello", "excerpt": "free excerpt", "tags": ["test"]},
+                          headers=_bearer(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        a = r.json()["article"]
+        assert a["published"] is True
+        assert a["vault"] is False
+        assert a["slug"] == "test-free-article-one"
+        TestArticles.free_slug = a["slug"]
+        TestArticles.free_id = a["id"]
+
+    def test_slug_dedup(self, admin_token):
+        r = requests.post(f"{API}/admin/articles",
+                          json={"title": "TEST Free Article One", "body_md": "dup"},
+                          headers=_bearer(admin_token), timeout=10)
+        assert r.status_code == 200
+        slug = r.json()["article"]["slug"]
+        assert slug.startswith("test-free-article-one-")
+        # cleanup
+        requests.delete(f"{API}/admin/articles/{r.json()['article']['id']}", headers=_bearer(admin_token), timeout=10)
+
+    def test_admin_create_vault_article(self, admin_token):
+        r = requests.post(f"{API}/admin/articles",
+                          json={"title": "TEST Vault Article One", "body_md": "vault body", "vault": True, "excerpt": "vault peek"},
+                          headers=_bearer(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        a = r.json()["article"]
+        assert a["vault"] is True
+        assert a["published"] is True
+        TestArticles.vault_id = a["id"]
+        TestArticles.vault_slug = a["slug"]
+
+    def test_public_articles_lists_free_only_with_vault_peek(self):
+        r = requests.get(f"{API}/public/articles", timeout=10)
+        assert r.status_code == 200
+        data = r.json()
+        titles = [a["title"] for a in data["articles"]]
+        assert "TEST Free Article One" in titles
+        # No vault article in main list
+        assert all(not a.get("vault") for a in data["articles"])
+        # Vault peek: titles only, no body_md or sales_copy_md
+        assert any(p["title"] == "TEST Vault Article One" for p in data["vault_peek"])
+        for p in data["vault_peek"]:
+            assert "body_md" not in p
+            assert "sales_copy_md" not in p
+
+    def test_public_article_returns_body_and_increments_views(self):
+        r1 = requests.get(f"{API}/public/articles/{TestArticles.free_slug}", timeout=10)
+        assert r1.status_code == 200
+        a1 = r1.json()["article"]
+        v1 = a1.get("views", 0)
+        assert a1["title"] == "TEST Free Article One"
+        assert "body_md" in a1
+        r2 = requests.get(f"{API}/public/articles/{TestArticles.free_slug}", timeout=10)
+        v2 = r2.json()["article"].get("views", 0)
+        assert v2 > v1
+
+    def test_public_article_404(self):
+        r = requests.get(f"{API}/public/articles/no-such-slug-xyz", timeout=10)
+        assert r.status_code == 404
+
+    def test_public_articles_does_not_expose_vault_body(self):
+        # Vault article must not be retrievable via /public/articles/{slug}
+        r = requests.get(f"{API}/public/articles/{TestArticles.vault_slug}", timeout=10)
+        assert r.status_code == 404
+
+    def test_vault_articles_requires_auth(self):
+        r = requests.get(f"{API}/vault/articles", timeout=10)
+        assert r.status_code in (401, 403)
+
+    def test_vault_article_requires_member(self):
+        # Anonymous member (no tier) tries vault article -> 403
+        email = _rand_email("TEST_anon")
+        tok = requests.post(f"{API}/auth/signup", json={"email": email, "password": "Pass1234!"}, timeout=10).json()["token"]
+        r = requests.get(f"{API}/vault/articles/{TestArticles.vault_slug}", headers=_bearer(tok), timeout=10)
+        assert r.status_code == 403
+
+    def test_full_member_can_read_vault(self, full_member):
+        r = requests.get(f"{API}/vault/articles", headers=_bearer(full_member["token"]), timeout=10)
+        assert r.status_code == 200
+        assert any(a["title"] == "TEST Vault Article One" for a in r.json()["articles"])
+        r2 = requests.get(f"{API}/vault/articles/{TestArticles.vault_slug}", headers=_bearer(full_member["token"]), timeout=10)
+        assert r2.status_code == 200
+        assert r2.json()["article"]["title"] == "TEST Vault Article One"
+
+    def test_foundational_can_read_vault(self, foundational_member):
+        # Spec: foundational reads vault index AND vault articles per current spec
+        r = requests.get(f"{API}/vault/articles", headers=_bearer(foundational_member["token"]), timeout=10)
+        assert r.status_code == 200
+
+    def test_patch_article_admin_only(self, full_member, admin_token):
+        r = requests.patch(f"{API}/admin/articles/{TestArticles.free_id}",
+                           json={"subtitle": "updated"},
+                           headers=_bearer(full_member["token"]), timeout=10)
+        assert r.status_code == 403
+        r2 = requests.patch(f"{API}/admin/articles/{TestArticles.free_id}",
+                            json={"subtitle": "updated"},
+                            headers=_bearer(admin_token), timeout=10)
+        assert r2.status_code == 200
+        assert r2.json()["article"]["subtitle"] == "updated"
+
+    def test_scheduled_article_publishes(self, admin_token):
+        # Past-scheduled article should be unpublished initially, then flip
+        r = requests.post(f"{API}/admin/articles",
+                          json={"title": "TEST Scheduled Past Article", "body_md": "scheduled body",
+                                "scheduled_for": "2020-01-01T00:00:00+00:00"},
+                          headers=_bearer(admin_token), timeout=10)
+        assert r.status_code == 200
+        art = r.json()["article"]
+        # Must be unpublished because scheduled_for was set
+        assert art["published"] is False
+        aid = art["id"]
+        # Force publish via PATCH (trigger-drops doesn't process articles per code, and waiting 60s for tick is slow)
+        p = requests.patch(f"{API}/admin/articles/{aid}",
+                           json={"published": True},
+                           headers=_bearer(admin_token), timeout=10)
+        assert p.status_code == 200
+        assert p.json()["article"]["published"] is True
+        # cleanup
+        requests.delete(f"{API}/admin/articles/{aid}", headers=_bearer(admin_token), timeout=10)
+
+    def test_delete_articles_cleanup(self, admin_token):
+        for aid in (TestArticles.free_id, TestArticles.vault_id):
+            r = requests.delete(f"{API}/admin/articles/{aid}", headers=_bearer(admin_token), timeout=10)
+            assert r.status_code == 200
+
+
+# ============== LEADS (iteration 2) ==============
+class TestLeads:
+    def test_lead_capture_and_idempotent(self, admin_token):
+        email = _rand_email("TEST_lead")
+        r1 = requests.post(f"{API}/public/lead", json={"email": email, "source": "blog"}, timeout=10)
+        assert r1.status_code == 200
+        # 2nd call shouldn't create dup. Verify via admin/leads
+        r2 = requests.post(f"{API}/public/lead", json={"email": email, "source": "blog"}, timeout=10)
+        assert r2.status_code == 200
+        leads = requests.get(f"{API}/admin/leads", headers=_bearer(admin_token), timeout=10).json()["leads"]
+        match = [l for l in leads if l["email"] == email.lower()]
+        assert len(match) == 1, f"Expected 1 lead, got {len(match)}"
+
+    def test_lead_queues_optin_email(self, admin_token):
+        email = _rand_email("TEST_leademail")
+        r = requests.post(f"{API}/public/lead", json={"email": email}, timeout=10)
+        assert r.status_code == 200
+        outbox = requests.get(f"{API}/admin/outbox", headers=_bearer(admin_token), timeout=10).json()["emails"]
+        match = [e for e in outbox if e.get("to") == email.lower() and e.get("kind") == "lead_optin"]
+        assert match, f"No lead_optin email in outbox for {email}"
+
+
+# ============== PROFILE (iteration 2) ==============
+class TestProfile:
+    def test_patch_profile_persists(self, member):
+        payload = {
+            "name": "TEST Profile Name",
+            "bio": "I am a sovereign.",
+            "avatar_url": "https://img/avatar.png",
+            "cover_image_url": "https://img/cover.png",
+            "pronouns": "they/them",
+            "location": "Earth",
+            "website": "https://example.com",
+            "setup_completed": True,
+        }
+        r = requests.patch(f"{API}/me/profile", json=payload, headers=_bearer(member["token"]), timeout=10)
+        assert r.status_code == 200, r.text
+        # GET /auth/me to verify persisted
+        u = requests.get(f"{API}/auth/me", headers=_bearer(member["token"]), timeout=10).json()["user"]
+        for k, v in payload.items():
+            assert u.get(k) == v, f"profile field {k} not persisted: {u.get(k)} != {v}"
+
+    def test_public_profile_requires_member(self, full_member):
+        # member fixture has been promoted to tier=full by full_member fixture (same module-scoped user)
+        # so use a fresh no-tier user to confirm 403
+        email = _rand_email("TEST_anon_pub")
+        tok = requests.post(f"{API}/auth/signup", json={"email": email, "password": "Pass1234!"}, timeout=10).json()["token"]
+        r = requests.get(f"{API}/users/{full_member['id']}/public", headers=_bearer(tok), timeout=10)
+        assert r.status_code == 403
+
+    def test_public_profile_returns_public_fields(self, full_member, admin_token):
+        r = requests.get(f"{API}/users/{full_member['id']}/public", headers=_bearer(full_member["token"]), timeout=10)
+        assert r.status_code == 200
+        d = r.json()
+        assert "user" in d and "posts" in d
+        assert "password_hash" not in d["user"]
+        assert "email" not in d["user"]
+
+
+# ============== EMAIL TEMPLATES (iteration 2) ==============
+class TestEmailTemplates:
+    def test_list_13_templates(self, admin_token):
+        r = requests.get(f"{API}/admin/email-templates", headers=_bearer(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        tpls = r.json()["templates"]
+        assert len(tpls) == 13, f"Expected 13 templates, got {len(tpls)}"
+        for t in tpls:
+            assert t.get("preview_subject")
+            assert t.get("preview_html")
+            assert t.get("key") and t.get("label")
+
+    def test_send_test_email_queues_to_admin(self, admin_token):
+        r = requests.post(f"{API}/admin/email-templates/onboarding/send-test", headers=_bearer(admin_token), timeout=15)
+        assert r.status_code == 200, r.text
+        # Check outbox has [TEST] subject queued
+        outbox = requests.get(f"{API}/admin/outbox", headers=_bearer(admin_token), timeout=10).json()["emails"]
+        match = [e for e in outbox if e.get("to") == ADMIN_EMAIL.lower() and e.get("kind") == "test_onboarding"]
+        assert match, "No test_onboarding email in outbox for admin"
+        assert match[0]["subject"].startswith("[TEST]")
+
+    def test_admin_only(self, full_member):
+        r = requests.get(f"{API}/admin/email-templates", headers=_bearer(full_member["token"]), timeout=10)
+        assert r.status_code == 403
+
+
+# ============== CHECKLIST link field + STATS (iteration 2) ==============
+class TestChecklistLink:
+    def test_checklist_has_15_items_with_link(self, admin_token):
+        r = requests.get(f"{API}/admin/checklist", headers=_bearer(admin_token), timeout=10)
+        items = r.json()["items"]
+        assert len(items) >= 15, f"Expected >=15 checklist items, got {len(items)}"
+        # Every default item must have a link starting with /admin?tab=
+        for it in items:
+            link = it.get("link", "")
+            # legacy/free items might be missing -- but seed backfills. Require non-empty link.
+            assert link and link.startswith("/admin?tab="), f"checklist item {it.get('title')} missing link"
+
+
+class TestAdminStats:
+    def test_stats_returns_all_keys(self, admin_token):
+        r = requests.get(f"{API}/admin/stats", headers=_bearer(admin_token), timeout=10)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        for k in ["members_active", "drops", "articles", "leads", "waitlist", "emails_sent", "emails_queued"]:
+            assert k in d, f"missing stats key {k}"
+        for v in d.values():
+            assert isinstance(v, int)

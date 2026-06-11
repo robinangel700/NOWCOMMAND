@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUpRight, Coffee, Compass, Crown, Hourglass, Sparkles, Zap } from "lucide-react";
+import { ArrowUpRight, Coffee, Compass, Crown, Hourglass, Sparkles, Zap, ArrowRight, Mail } from "lucide-react";
 import { api, fmt } from "../lib/api";
 import Countdown from "../components/Countdown";
 import { useAuth } from "../lib/auth";
@@ -11,15 +11,28 @@ const CLOCK = "https://images.unsplash.com/photo-1518281361980-b26bfd556770?crop
 
 export default function Landing() {
   const [state, setState] = useState(null);
+  const [blog, setBlog] = useState({ articles: [], vault_peek: [] });
+  const [optinEmail, setOptinEmail] = useState("");
   const [params] = useSearchParams();
   const { user } = useAuth();
   const nav = useNavigate();
 
   useEffect(() => {
     api.get("/public/state").then((r) => setState(r.data));
+    api.get("/public/articles").then((r) => setBlog(r.data));
     const ref = params.get("ref");
     if (ref) localStorage.setItem("nowrealm_ref", ref);
   }, [params]);
+
+  const submitOptin = async (e) => {
+    e.preventDefault();
+    if (!optinEmail) return;
+    try { await api.post("/public/lead", { email: optinEmail, source: "landing_optin" });
+      setOptinEmail("");
+      const { toast } = await import("sonner");
+      toast.success("You're on the list. Watch your inbox.");
+    } catch {}
+  };
 
   const headlinePrice = state ? fmt.money(state.current_full_monthly_cents) : "$44";
 
@@ -81,6 +94,51 @@ export default function Landing() {
               </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* BLOG HERO */}
+      <section className="py-24 md:py-32 border-t border-borderGold">
+        <div className="max-w-7xl mx-auto px-6 lg:px-10">
+          <div className="flex items-end justify-between flex-wrap gap-6 mb-12">
+            <div>
+              <div className="overline mb-3">// THE NOWREALM BLOG</div>
+              <h2 className="font-display text-4xl md:text-6xl text-cream leading-[1.0]">Read freely. Get warmed up. <br/>Then cross the threshold.</h2>
+              <p className="text-textMuted text-lg mt-5 max-w-2xl">Short, sharp essays on money, time, and divine timing. New pieces every week. Subscribe and the next one lands in your inbox.</p>
+            </div>
+            <Link to="/blog" data-testid="landing-blog-link" className="btn-ghost">See all <ArrowRight className="w-4 h-4"/></Link>
+          </div>
+          {blog.articles.length > 0 ? (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-px bg-borderGold">
+              {blog.articles.slice(0, 6).map((a) => (
+                <Link key={a.id} to={`/blog/${a.slug}`} data-testid={`landing-article-${a.slug}`} className="bg-void p-7 group hover:bg-surface transition-colors">
+                  {a.cover_image_url && (
+                    <div className="-m-7 mb-5 h-44 overflow-hidden">
+                      <img src={a.cover_image_url} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"/>
+                    </div>
+                  )}
+                  <div className="overline mb-3">{a.tags?.[0] || "ESSAY"} &middot; {fmt.date(a.published_at)}</div>
+                  <h3 className="font-display text-2xl text-cream group-hover:text-gold transition-colors leading-tight">{a.title}</h3>
+                  <p className="text-textMuted text-sm mt-3 line-clamp-3">{a.excerpt}</p>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="panel p-10 text-center">
+              <Coffee className="w-8 h-8 text-gold mx-auto mb-3"/>
+              <p className="text-textMuted">Robin is sharpening the first essays. Subscribe below to get the first one when it drops.</p>
+            </div>
+          )}
+
+          <form onSubmit={submitOptin} className="mt-12 panel p-6 md:p-8 max-w-2xl mx-auto" data-testid="landing-optin">
+            <div className="overline mb-2 flex items-center gap-2"><Mail className="w-3 h-3"/>// TUESDAY TRANSMISSION</div>
+            <h3 className="font-display text-2xl md:text-3xl text-cream mb-3">One short, sharp piece every Tuesday.</h3>
+            <p className="text-textMuted mb-4 text-sm">Money. Time. Dominion. Free. Unsubscribe in one click.</p>
+            <div className="flex flex-wrap gap-3">
+              <input data-testid="landing-optin-email" type="email" required value={optinEmail} onChange={(e) => setOptinEmail(e.target.value)} placeholder="you@dominion.com" className="flex-1 min-w-[220px]"/>
+              <button data-testid="landing-optin-submit" type="submit" className="btn-gold">Subscribe</button>
+            </div>
+          </form>
         </div>
       </section>
 

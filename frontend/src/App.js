@@ -14,6 +14,9 @@ import { NotesPage, BookmarksPage } from "@/pages/Personal";
 import Affiliate from "@/pages/Affiliate";
 import Billing from "@/pages/Billing";
 import Admin from "@/pages/Admin";
+import { BlogIndex, ArticleDetail } from "@/pages/Blog";
+import { VaultIndex, VaultArticle } from "@/pages/Vault";
+import { MyProfile, PublicProfile } from "@/pages/Profile";
 import "@/App.css";
 
 function Protected({ children, adminOnly = false, memberOnly = false }) {
@@ -37,15 +40,21 @@ function App() {
             <Route path="/login" element={<Auth mode="login" />} />
             <Route path="/signup" element={<Auth mode="signup" />} />
             <Route path="/about" element={<About />} />
+            <Route path="/blog" element={<BlogIndex />} />
+            <Route path="/blog/:slug" element={<ArticleDetail />} />
             <Route path="/checkout/success" element={<Protected><CheckoutSuccess /></Protected>} />
             <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
             <Route path="/drops" element={<Protected memberOnly><DropsList /></Protected>} />
             <Route path="/drops/:id" element={<Protected memberOnly><DropDetail /></Protected>} />
+            <Route path="/vault" element={<Protected memberOnly><VaultIndex /></Protected>} />
+            <Route path="/vault/:slug" element={<Protected memberOnly><VaultArticle /></Protected>} />
             <Route path="/community" element={<Protected memberOnly><Community /></Protected>} />
             <Route path="/notes" element={<Protected memberOnly><NotesPage /></Protected>} />
             <Route path="/bookmarks" element={<Protected memberOnly><BookmarksPage /></Protected>} />
             <Route path="/affiliate" element={<Protected><Affiliate /></Protected>} />
             <Route path="/billing" element={<Protected><Billing /></Protected>} />
+            <Route path="/profile" element={<Protected><MyProfile /></Protected>} />
+            <Route path="/u/:id" element={<Protected memberOnly><PublicProfile /></Protected>} />
             <Route path="/admin" element={<Protected adminOnly><Admin /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

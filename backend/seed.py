@@ -6,16 +6,32 @@ from auth import hash_password
 
 
 DEFAULT_CHECKLIST = [
-    ("Upload final Mammon Breaker Activation Codes PDF", "Replace the placeholder under Admin > Downloads."),
-    ("Write your One Page Manifesto", "Set it in Admin > Community > Manifesto. Members see it pinned in the community."),
-    ("Schedule your first 4 Wednesday Drops", "Use Admin > Drops > New. Set scheduled_for to upcoming Wednesdays."),
-    ("Set this month's Executive Summary", "Admin > Summary. 3 bullets of what matters, 3 of what to ignore, 1 resource."),
-    ("Record 1 monthly quick-win asset (under 15 min)", "Upload as a Drop with the Quick Win tag."),
-    ("Decide first a-la-carte drop & price", "Admin > Drops > set alacarte_price_cents to enable single-asset purchase."),
-    ("Set KingdomTitleDeed upsell copy", "Admin > Settings > Upsell. Used for monthly upsell emails."),
-    ("Confirm Stripe is connected with live keys", "Edit /app/backend/.env STRIPE_API_KEY to switch from test to live."),
-    ("Approve community rules", "Admin > Community > Rules. Members see these before posting."),
-    ("Press LAUNCH", "Admin > Launch. Starts the 3-week $44 promo window and unlocks public signup."),
+    ("Set your creator profile", "Upload a profile picture, cover image, bio and pronouns in Admin > Profile. Members see this on your posts and across the community.", "/admin?tab=profile"),
+    ("Upload the final Mammon Breaker PDF", "Drop the polished PDF into /app/backend/static/downloads/mammon_breaker_activation_codes.pdf then press 'Regenerate' in Admin > Launch.", "/admin?tab=launch"),
+    ("Write your One Page Manifesto", "Admin > Community > Manifesto. Members see it pinned in the community and on /about.", "/admin?tab=community"),
+    ("Approve the community house rules", "Admin > Community > Rules. Edit or accept defaults.", "/admin?tab=community"),
+    ("Write 3 free blog posts", "Admin > Articles > New. Mark vault=OFF. Free posts are the hero of the public site and drive opt-ins.", "/admin?tab=articles"),
+    ("Write 5 vault articles (members only)", "Admin > Articles > New, mark vault=ON. These are enticing previews on the public blog and full reads inside the membership.", "/admin?tab=articles"),
+    ("Schedule the first 4 Wednesday drops", "Admin > Drops > New. Set scheduled_for to the next 4 Wednesdays.", "/admin?tab=drops"),
+    ("Record 1 monthly quick-win asset (under 15 min)", "Upload as a Drop with Quick Win checked.", "/admin?tab=drops"),
+    ("Set up your first a-la-carte drop", "Drop form, set alacarte_price_cents to enable single-asset purchase.", "/admin?tab=drops"),
+    ("Customize your KingdomTitleDeed.com upsell", "Admin > Settings > Upsell (in Launch tab). Used for monthly upsell emails inside the membership.", "/admin?tab=launch"),
+    ("Review every pre-written email", "Admin > Emails. Send a test of each one to yourself. Override copy if you want.", "/admin?tab=emails"),
+    ("Confirm Stripe is connected with live keys", "Edit /app/backend/.env STRIPE_API_KEY to switch from test to live, then restart backend.", "/admin?tab=launch"),
+    ("Confirm Resend is connected", "Edit /app/backend/.env RESEND_API_KEY. Until set, emails queue in Admin > Email Log.", "/admin?tab=launch"),
+    ("Set this month's Executive Summary draft", "Admin > Summary. 3 bullets matters, 3 ignore, 1 resource. Save as draft.", "/admin?tab=summary"),
+    ("Press LAUNCH", "Admin > Launch. Starts the 3-week $44 promo window and unlocks public signup.", "/admin?tab=launch"),
+]
+
+
+# Items added in later releases. Seeded only if missing by title.
+_LATER_ITEMS = [
+    "Set your creator profile",
+    "Write 3 free blog posts",
+    "Write 5 vault articles (members only)",
+    "Customize your KingdomTitleDeed.com upsell",
+    "Review every pre-written email",
+    "Confirm Resend is connected",
 ]
 
 
@@ -85,14 +101,50 @@ async def seed_all():
         if not existing_s:
             await db.settings.insert_one({"key": k, "value": v, "updated_at": now_iso()})
 
-    # ---- Deliverable checklist (only seed if empty)
-    if await db.checklist.count_documents({}) == 0:
-        for i, (title, desc) in enumerate(DEFAULT_CHECKLIST):
+    # ---- Deliverable checklist
+    # Remove legacy MVP titles that have been superseded by new richer items
+    LEGACY_TITLES = [
+        "Upload final Mammon Breaker Activation Codes PDF",
+        "Schedule your first 4 Wednesday Drops",
+        "Set this month's Executive Summary",
+        "Decide first a-la-carte drop & price",
+        "Set KingdomTitleDeed upsell copy",
+        "Approve community rules",
+    ]
+    await db.checklist.delete_many({"title": {"$in": LEGACY_TITLES}, "done": False})
+
+    existing_titles = {it["title"] async for it in db.checklist.find({}, {"title": 1, "_id": 0})}
+    if not existing_titles:
+        for i, (title, desc, link) in enumerate(DEFAULT_CHECKLIST):
             await db.checklist.insert_one({
                 "id": str(uuid.uuid4()),
                 "title": title,
                 "description": desc,
+                "link": link,
                 "done": False,
                 "order": i,
                 "created_at": now_iso(),
             })
+    else:
+        # Migrate: ensure newly-added items exist, and add 'link' to old rows.
+        existing_max_order = 0
+        async for it in db.checklist.find({}, {"order": 1, "_id": 0}):
+            existing_max_order = max(existing_max_order, it.get("order", 0))
+        for title, desc, link in DEFAULT_CHECKLIST:
+            if title not in existing_titles:
+                existing_max_order += 1
+                await db.checklist.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "title": title,
+                    "description": desc,
+                    "link": link,
+                    "done": False,
+                    "order": existing_max_order,
+                    "created_at": now_iso(),
+                })
+        # backfill link field on legacy rows
+        for title, desc, link in DEFAULT_CHECKLIST:
+            await db.checklist.update_one(
+                {"title": title, "$or": [{"link": {"$exists": False}}, {"link": ""}]},
+                {"$set": {"link": link}},
+            )

@@ -1,21 +1,33 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Download, Sparkles, Users, BookOpen, Clock, TrendingUp, Hourglass, Lock } from "lucide-react";
 import { api, fmt } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
+import SetupWizard from "../components/SetupWizard";
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const location = useLocation();
   const [progress, setProgress] = useState(null);
   const [drops, setDrops] = useState([]);
   const [upsell, setUpsell] = useState(null);
+  const [showWizard, setShowWizard] = useState(false);
 
   useEffect(() => {
     api.get("/progress").then((r) => setProgress(r.data));
     api.get("/drops").then((r) => setDrops(r.data.drops || []));
     api.get("/public/state").then(() => {});
-  }, []);
+    const params = new URLSearchParams(location.search);
+    if (params.get("wizard") === "1") {
+      setShowWizard(true);
+    } else if (user && user.tier === "full" && !user.setup_completed) {
+      setShowWizard(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const closeWizard = () => setShowWizard(false);
 
   const downloadPDF = async () => {
     try {
@@ -53,6 +65,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen px-6 lg:px-10 py-12 lg:py-16">
+      {showWizard && <SetupWizard onClose={closeWizard} />}
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-wrap items-end justify-between gap-6 mb-12">
           <div>

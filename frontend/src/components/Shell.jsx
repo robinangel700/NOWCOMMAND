@@ -15,11 +15,13 @@ export default function Shell({ children }) {
   const memberLinks = [
     { to: "/dashboard", label: "Dashboard", icon: Compass },
     { to: "/drops", label: "Drops", icon: Sparkles },
+    { to: "/vault", label: "Vault", icon: BookOpen },
     { to: "/community", label: "Community", icon: Users },
     { to: "/notes", label: "Notes", icon: BookOpen },
     { to: "/bookmarks", label: "Bookmarks", icon: Bookmark },
     { to: "/affiliate", label: "Affiliate", icon: Crown },
     { to: "/billing", label: "Billing", icon: CreditCard },
+    { to: "/profile", label: "Profile", icon: Compass },
   ];
   const adminLink = { to: "/admin", label: "Admin", icon: SettingsIcon };
   const links = isMember ? (isAdmin ? [...memberLinks, adminLink] : memberLinks) : [];
@@ -59,6 +61,7 @@ export default function Shell({ children }) {
               </>
             ) : (
               <>
+                <Link to="/blog" data-testid="nav-blog" className="px-4 py-2 text-xs tracking-[0.2em] uppercase font-mono text-textMuted hover:text-cream">Blog</Link>
                 <Link to="/about" data-testid="nav-about" className="px-4 py-2 text-xs tracking-[0.2em] uppercase font-mono text-textMuted hover:text-cream">Manifesto</Link>
                 <Link to="/pricing" data-testid="nav-pricing" className="px-4 py-2 text-xs tracking-[0.2em] uppercase font-mono text-textMuted hover:text-cream">Pricing</Link>
                 <Link to="/login" data-testid="nav-login" className="px-4 py-2 text-xs tracking-[0.2em] uppercase font-mono text-textMuted hover:text-cream">Sign in</Link>
@@ -82,6 +85,7 @@ export default function Shell({ children }) {
                 </>
               ) : (
                 <>
+                  <Link to="/blog" onClick={() => setOpen(false)} className="text-textMuted hover:text-gold text-sm font-mono uppercase tracking-[0.2em]">Blog</Link>
                   <Link to="/about" onClick={() => setOpen(false)} className="text-textMuted hover:text-gold text-sm font-mono uppercase tracking-[0.2em]">Manifesto</Link>
                   <Link to="/pricing" onClick={() => setOpen(false)} className="text-textMuted hover:text-gold text-sm font-mono uppercase tracking-[0.2em]">Pricing</Link>
                   <Link to="/login" onClick={() => setOpen(false)} className="text-textMuted hover:text-gold text-sm font-mono uppercase tracking-[0.2em]">Sign in</Link>

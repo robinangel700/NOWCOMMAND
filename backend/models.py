@@ -123,3 +123,62 @@ class WaitlistIn(BaseModel):
 
 class ManifestoIn(BaseModel):
     body_md: str
+
+
+class ArticleIn(BaseModel):
+    title: str
+    slug: Optional[str] = None  # auto-generated if empty
+    subtitle: Optional[str] = None
+    excerpt: Optional[str] = None
+    body_md: str
+    cover_image_url: Optional[str] = None
+    tags: List[str] = []
+    seo_title: Optional[str] = None
+    seo_description: Optional[str] = None
+    og_image_url: Optional[str] = None
+    vault: bool = False
+    scheduled_for: Optional[str] = None
+    sales_copy_md: Optional[str] = None  # custom sales pitch shown at bottom of free articles
+    optin_headline: Optional[str] = None
+    optin_cta: Optional[str] = None
+
+
+class ArticleUpdate(BaseModel):
+    title: Optional[str] = None
+    slug: Optional[str] = None
+    subtitle: Optional[str] = None
+    excerpt: Optional[str] = None
+    body_md: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    tags: Optional[List[str]] = None
+    seo_title: Optional[str] = None
+    seo_description: Optional[str] = None
+    og_image_url: Optional[str] = None
+    vault: Optional[bool] = None
+    scheduled_for: Optional[str] = None
+    sales_copy_md: Optional[str] = None
+    optin_headline: Optional[str] = None
+    optin_cta: Optional[str] = None
+    published: Optional[bool] = None
+
+
+class LeadIn(BaseModel):
+    email: EmailStr
+    source: Optional[str] = None  # e.g. article slug
+    name: Optional[str] = None
+
+
+class ProfileIn(BaseModel):
+    name: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    pronouns: Optional[str] = None
+    location: Optional[str] = None
+    website: Optional[str] = None
+    setup_completed: Optional[bool] = None
+
+
+class EmailTemplateUpdate(BaseModel):
+    subject_override: Optional[str] = None
+    html_override: Optional[str] = None  # if set, replaces default body

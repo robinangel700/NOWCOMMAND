@@ -1,0 +1,61 @@
+{
+  "summary": "Iteration 2 verification of NOWREALM Phase 2 (articles, profiles, leads, email templates, setup wizard, billing UI, admin tabs). Backend: 61/61 pytest pass (added 26 new cases for articles/leads/profile/emails/checklist-link/stats). Frontend: 1 CRITICAL React crash on /dashboard ('showWizard is not defined') found and patched in-place to unblock testing. All admin new tabs + landing/blog opt-in flows verified working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/admin/trigger-drops",
+        "issue": "Per review_request, trigger-drops should ALSO call _publish_due_articles (newer scheduler.py). Current server.py:1130 only calls scheduler._publish_due_drops(), not articles. Scheduled articles still publish via the 60-sec scheduler tick (verified in scheduler.py:189), but the synchronous admin trigger does not. Consider adding `await scheduler._publish_due_articles()` next to it."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Dashboard.jsx",
+        "issue": "FIXED IN-PLACE BY TESTER. Original code at line 56 referenced `showWizard`, `closeWizard`, and `<SetupWizard>` without importing SetupWizard or declaring the showWizard state. This caused a ReferenceError ('showWizard is not defined') that crashed /dashboard for EVERY authenticated user (admin and member), rendering React's red-screen error overlay. I added the import, useState, useLocation, and a useEffect that opens the wizard when `?wizard=1` is in the URL OR when user.tier==='full' && !user.setup_completed. Please code-review this minimal patch.",
+        "selector": "/app/frontend/src/pages/Dashboard.jsx (lines 1-30)",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "Billing.jsx",
+        "issue": "data-testid for the 'Begin cancellation' button is `cancel-btn` (line 95) rather than `cancel-begin` as referenced in the review_request. Functional behavior is fine; this is a naming mismatch that may confuse future automation. Rename to `cancel-begin` for consistency with the iteration_2 spec.",
+        "selector": "[data-testid=\"cancel-btn\"]",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "REVIEW tester's Dashboard.jsx patch (showWizard / SetupWizard import + ?wizard=1 query param handling + auto-open when tier=full and !setup_completed). It is a minimal in-place fix to unblock testing; verify it matches the intended product spec (esp. the auto-open condition; foundational tier currently does NOT auto-open per spec).",
+    "Optionally rename Billing.jsx data-testid `cancel-btn` -> `cancel-begin` to match iteration_2 review spec.",
+    "Optionally have POST /api/admin/trigger-drops also call scheduler._publish_due_articles() so admin can synchronously force scheduled article publishing without waiting for the 60-second cron tick."
+  ],
+  "critical_code_review_comments": [
+    "Dashboard.jsx referenced undefined identifiers (showWizard, closeWizard, SetupWizard) — indicates the main agent never compiled/loaded /dashboard after the iteration-2 changes. Recommend a smoke run of the dev server before declaring frontend complete.",
+    "server.py is now 1453 lines (+300 over iteration 1). Strongly recommend splitting into routers/{articles,profile,emails,admin_stats}.py before adding more endpoints.",
+    "POST /admin/articles slug uniqueness check is a sequential O(N) loop. For tables with many duplicates this is slow; consider a single regex query and counting matches.",
+    "/users/{user_id}/public uses `_is_member_or_admin(viewer)` — viewer is required via Depends(get_current_user) which already raises 401 for no token, so the 403 path only triggers for tier='none'/'canceled'. OK behavior, but the error message 'Members only' could be more actionable (e.g. 'Active membership required to view profiles').",
+    "scheduler.py runs ensure_indexes on startup but creates a UNIQUE index on `articles.slug`. If two admins create the same slug in flight, the second insert raises a Mongo duplicate key error which surfaces as a 500. Current slug-dedup loop in /admin/articles handles single-process collisions but not concurrent ones; add try/except DuplicateKeyError around insert to retry.",
+    "Lead capture endpoint (/public/lead) is unauthenticated and unrate-limited — public attacker can flood the leads collection. Add basic IP rate limiting or hCaptcha."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py",
+    "/app/frontend/src/pages/Dashboard.jsx"
+  ],
+  "success_rate": {
+    "backend": "100% (61/61 pytest cases pass)",
+    "frontend": "~95% after Dashboard.jsx patch (all admin tabs, landing/blog optin, billing modal verified)"
+  },
+  "test_credentials": "Admin: robinangel700@gmail.com / BoopLoop777. Use @example.com domain for test member emails (pydantic EmailStr rejects .test).",
+  "seed_data_creation": "Tests create TEST_ prefixed users, articles, leads, posts, drops. TestArticles tearsdown its articles via DELETE. TEST_ users + a few leads persist (expected).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest suite at /app/backend/tests/backend_test.py is now 61 cases covering iteration 1 + iteration 2. Run with `pytest /app/backend/tests/backend_test.py -v`. The dev-mode Stripe flow + dev-mode Resend (queue to emails_outbox) are still mocked. Scheduler ticks every 60s and now publishes due articles in addition to drops. /admin?tab=<id> routing pattern is the convention for jump-to-section. Frontend: SetupWizard auto-opens for tier=full + !setup_completed members; admin (tier=admin) is excluded from auto-open. The iteration_1 backend bug about /admin/monthly-summary sent=false is now fixed (test passes).",
+  "rca of the issue": "ReferenceError on /dashboard root cause: main agent created SetupWizard.jsx component and inserted the JSX usage in Dashboard.jsx (line 56) but forgot to (a) `import SetupWizard from '../components/SetupWizard'`, (b) declare `const [showWizard, setShowWizard] = useState(false)`, (c) define `closeWizard`. Reproduction: visit /login, sign in as ANY user; red-screen error overlay appears on /dashboard. Mitigation applied: added the missing import, state, useEffect that reads ?wizard=1 OR (user.tier==='full' && !user.setup_completed), and closeWizard fn. Re-tested admin login -> /dashboard renders cleanly -> /admin tabs all work."
+}

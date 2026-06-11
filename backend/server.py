@@ -25,7 +25,8 @@ from models import (
     SignupIn, LoginIn, CheckoutIn, AlacarteCheckoutIn, DropIn, DropUpdate,
     PostIn, CommentIn, NoteIn, QuizIn, QuizAttemptIn, LearningPathIn,
     ChecklistItemIn, SettingsIn, MonthlySummaryIn, ReminderIn, CancelIn,
-    WaitlistIn, ManifestoIn,
+    WaitlistIn, ManifestoIn, ArticleIn, ArticleUpdate, LeadIn, ProfileIn,
+    EmailTemplateUpdate,
 )
 from services import email_service, stripe_service, pdf_service, scheduler
 
@@ -356,23 +357,16 @@ async def checkout_status(session_id: str, user: dict = Depends(get_current_user
                         "created_at": now_iso(),
                     })
             # Send onboarding + instant download link
-            fe = os.environ.get("FRONTEND_BASE_URL", "").rstrip("/")
-            await email_service.send_email(
-                user["email"],
-                "Welcome to NOWREALM \u2014 Activation Codes Inside",
-                email_service.wrap_html(
-                    "You crossed the threshold.",
-                    f"<p>Your seat in NOWREALM is active. Your first transmission \u2014 <em>The Mammon Breaker Activation Codes</em> \u2014 is attached and also waiting in your dashboard.</p>"
-                    f"<p><strong>What to do in the next 24 hours:</strong></p>"
-                    f"<ol><li>Download and read the Activation Codes once tonight.</li>"
-                    f"<li>Open the Community Vault and read the One Page Manifesto.</li>"
-                    f"<li>Post one sentence in the Weekly Biggest Win thread.</li>"
-                    f"<li>Wednesday's drop is already scheduled \u2014 watch the dashboard.</li></ol>",
-                    cta_url=f"{fe}/dashboard",
-                    cta_label="Open Your Dashboard",
-                ),
-                kind="onboarding",
-            )
+            try:
+                import email_templates as _et
+                subj, html = _et.render("onboarding", {
+                    "name": user.get("name", ""),
+                    "frontend": os.environ.get("FRONTEND_BASE_URL", "").rstrip("/"),
+                })
+            except Exception:
+                subj = "Welcome to NOWREALM"
+                html = email_service.wrap_html("Welcome", "<p>Open your dashboard.</p>")
+            await email_service.send_email(user["email"], subj, html, kind="onboarding")
         elif tx["type"] == "alacarte":
             drop_id = tx.get("drop_id")
             await db.alacarte_unlocks.insert_one({
@@ -382,6 +376,16 @@ async def checkout_status(session_id: str, user: dict = Depends(get_current_user
                 "amount_cents": tx.get("amount_cents"),
                 "created_at": now_iso(),
             })
+            try:
+                import email_templates as _et
+                d = await db.drops.find_one({"id": drop_id}, {"_id": 0})
+                subj, html = _et.render("alacarte_purchased", {
+                    "title": (d or {}).get("title", "Your asset"),
+                    "frontend": os.environ.get("FRONTEND_BASE_URL", "").rstrip("/"),
+                })
+                await email_service.send_email(user["email"], subj, html, kind="alacarte_purchased")
+            except Exception:
+                pass
         update["finalized_at"] = now_iso()
 
     await db.payment_transactions.update_one({"session_id": session_id}, {"$set": update})
@@ -745,6 +749,7 @@ async def create_post(body: PostIn, user: dict = Depends(get_current_user)):
         "user_id": user["id"],
         "user_name": user.get("name", user["email"]),
         "user_role": user.get("role", "member"),
+        "user_avatar": user.get("avatar_url", ""),
         "body": body.body,
         "kind": body.kind,
         "pinned": False,
@@ -775,6 +780,7 @@ async def add_comment(post_id: str, body: CommentIn, user: dict = Depends(get_cu
     await db.comments.insert_one({
         "id": cid, "post_id": post_id, "user_id": user["id"],
         "user_name": user.get("name", user["email"]), "user_role": user.get("role", "member"),
+        "user_avatar": user.get("avatar_url", ""),
         "body": body.body, "deleted": False, "created_at": now_iso(),
     })
     return {"id": cid}
@@ -1131,6 +1137,307 @@ async def admin_waitlist(user: dict = Depends(get_current_user)):
     db = get_db()
     rows = await db.waitlist.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return {"waitlist": rows, "count": len(rows)}
+
+
+# ============================================================
+#  ARTICLES / BLOG  (free + vault)
+# ============================================================
+
+import re as _re
+
+
+def _slugify(s: str) -> str:
+    s = (s or "").lower().strip()
+    s = _re.sub(r"[^a-z0-9\s-]", "", s)
+    s = _re.sub(r"\s+", "-", s)
+    s = _re.sub(r"-+", "-", s)
+    return s[:80].strip("-") or uuid.uuid4().hex[:8]
+
+
+def _article_visible(a: dict, user: Optional[dict]) -> bool:
+    if not a.get("published"):
+        return False
+    if not a.get("vault"):
+        return True
+    if not user:
+        return False
+    return user.get("role") == "admin" or user.get("tier") in ("full", "foundational")
+
+
+@api.get("/public/articles")
+async def public_articles(tag: Optional[str] = None, limit: int = 50):
+    db = get_db()
+    q = {"published": True, "vault": False}
+    if tag:
+        q["tags"] = tag
+    rows = await db.articles.find(q, {"_id": 0, "body_md": 0}).sort("published_at", -1).limit(limit).to_list(limit)
+    # vault peek (just titles + excerpts) for marketing on the public blog page
+    vault_peek = await db.articles.find(
+        {"published": True, "vault": True},
+        {"_id": 0, "body_md": 0, "sales_copy_md": 0},
+    ).sort("published_at", -1).limit(6).to_list(6)
+    return {"articles": rows, "vault_peek": vault_peek}
+
+
+@api.get("/public/articles/{slug}")
+async def public_article(slug: str):
+    db = get_db()
+    a = await db.articles.find_one({"slug": slug, "published": True, "vault": False}, {"_id": 0})
+    if not a:
+        raise HTTPException(404, "Article not found")
+    await db.articles.update_one({"slug": slug}, {"$inc": {"views": 1}})
+    return {"article": a}
+
+
+@api.get("/vault/articles")
+async def vault_articles(user: dict = Depends(get_current_user)):
+    if not _is_member_or_admin(user):
+        raise HTTPException(403, "Sovereign or Foundational tier required")
+    db = get_db()
+    rows = await db.articles.find({"published": True, "vault": True}, {"_id": 0, "body_md": 0}).sort("published_at", -1).to_list(500)
+    return {"articles": rows}
+
+
+@api.get("/vault/articles/{slug}")
+async def vault_article(slug: str, user: dict = Depends(get_current_user)):
+    db = get_db()
+    a = await db.articles.find_one({"slug": slug, "published": True}, {"_id": 0})
+    if not a:
+        raise HTTPException(404, "Article not found")
+    if a.get("vault") and not _is_member_or_admin(user):
+        raise HTTPException(403, "Vault content requires an active membership")
+    await db.articles.update_one({"slug": slug}, {"$inc": {"views": 1}})
+    return {"article": a}
+
+
+@api.post("/public/lead")
+async def capture_lead(body: LeadIn):
+    db = get_db()
+    email = body.email.lower()
+    existing = await db.leads.find_one({"email": email})
+    if not existing:
+        await db.leads.insert_one({
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "name": body.name or "",
+            "source": body.source or "blog",
+            "created_at": now_iso(),
+        })
+    # Fire opt-in welcome email
+    try:
+        import email_templates
+        subj, html = email_templates.render("lead_optin", {"frontend": os.environ.get("FRONTEND_BASE_URL", "")})
+        await email_service.send_email(email, subj, html, kind="lead_optin")
+    except Exception:
+        pass
+    return {"status": "ok"}
+
+
+@api.post("/admin/articles")
+async def admin_create_article(body: ArticleIn, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    slug = _slugify(body.slug or body.title)
+    # ensure unique slug
+    base = slug; i = 1
+    while await db.articles.find_one({"slug": slug}):
+        i += 1
+        slug = f"{base}-{i}"
+    published = False
+    published_at = None
+    if not body.scheduled_for:
+        published = True
+        published_at = now_iso()
+    doc = {
+        "id": str(uuid.uuid4()),
+        "slug": slug,
+        "title": body.title,
+        "subtitle": body.subtitle or "",
+        "excerpt": body.excerpt or "",
+        "body_md": body.body_md,
+        "cover_image_url": body.cover_image_url or "",
+        "tags": body.tags,
+        "seo_title": body.seo_title or body.title,
+        "seo_description": body.seo_description or body.excerpt or "",
+        "og_image_url": body.og_image_url or body.cover_image_url or "",
+        "vault": bool(body.vault),
+        "scheduled_for": body.scheduled_for,
+        "sales_copy_md": body.sales_copy_md or "",
+        "optin_headline": body.optin_headline or "",
+        "optin_cta": body.optin_cta or "",
+        "published": published,
+        "published_at": published_at,
+        "views": 0,
+        "created_at": now_iso(),
+        "created_by": user["id"],
+        "author_name": user.get("name", "Robin Angel"),
+        "author_avatar": user.get("avatar_url", ""),
+    }
+    await db.articles.insert_one(doc)
+    doc.pop("_id", None)
+    return {"article": doc}
+
+
+@api.patch("/admin/articles/{article_id}")
+async def admin_update_article(article_id: str, body: ArticleUpdate, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    update = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
+    if "slug" in update and update["slug"]:
+        update["slug"] = _slugify(update["slug"])
+    if update.get("published") is True:
+        update["published_at"] = now_iso()
+    await db.articles.update_one({"id": article_id}, {"$set": update})
+    a = await db.articles.find_one({"id": article_id}, {"_id": 0})
+    return {"article": a}
+
+
+@api.delete("/admin/articles/{article_id}")
+async def admin_delete_article(article_id: str, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    await db.articles.delete_one({"id": article_id})
+    return {"status": "ok"}
+
+
+@api.get("/admin/articles")
+async def admin_list_articles(user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    rows = await db.articles.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return {"articles": rows}
+
+
+@api.get("/admin/leads")
+async def admin_leads(user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    rows = await db.leads.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    return {"leads": rows, "count": len(rows)}
+
+
+# ============================================================
+#  PROFILES (avatar, cover, bio, setup wizard)
+# ============================================================
+
+@api.patch("/me/profile")
+async def update_my_profile(body: ProfileIn, user: dict = Depends(get_current_user)):
+    db = get_db()
+    update = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if update:
+        await db.users.update_one({"id": user["id"]}, {"$set": update})
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+    return {"user": u}
+
+
+@api.get("/users/{user_id}/public")
+async def public_user_profile(user_id: str, viewer: dict = Depends(get_current_user)):
+    if not _is_member_or_admin(viewer):
+        raise HTTPException(403, "Members only")
+    db = get_db()
+    u = await db.users.find_one({"id": user_id}, {
+        "_id": 0, "id": 1, "name": 1, "bio": 1, "avatar_url": 1,
+        "cover_image_url": 1, "pronouns": 1, "location": 1, "website": 1,
+        "tier": 1, "role": 1, "created_at": 1,
+    })
+    if not u:
+        raise HTTPException(404, "Not found")
+    posts = await db.posts.find({"user_id": user_id, "deleted": {"$ne": True}}, {"_id": 0}).sort("created_at", -1).limit(20).to_list(20)
+    return {"user": u, "posts": posts}
+
+
+# ============================================================
+#  EMAIL TEMPLATES (admin preview + override)
+# ============================================================
+
+@api.get("/admin/email-templates")
+async def admin_email_templates(user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    import email_templates as et
+    db = get_db()
+    overrides = {}
+    async for o in db.email_template_overrides.find({}, {"_id": 0}):
+        overrides[o["key"]] = o
+    out = []
+    fe = os.environ.get("FRONTEND_BASE_URL", "")
+    for key, meta in et.TEMPLATES.items():
+        sample_ctx = {"frontend": fe, "name": "Sovereign", "topic": "your last drop",
+                      "title": "Sample title", "preview": "Sample preview",
+                      "excerpt": "Sample excerpt", "slug": "sample", "vault": False,
+                      "matters": ["A", "B", "C"], "ignore": ["X", "Y"],
+                      "one_resource": "The one resource",
+                      "amount": "$22.00", "referred": "a new sovereign"}
+        try:
+            subj, html = meta["fn"](sample_ctx)
+        except Exception as e:
+            subj, html = "(render error)", str(e)
+        out.append({
+            "key": key,
+            "label": meta["label"],
+            "trigger": meta["trigger"],
+            "variables": meta["variables"],
+            "preview_subject": subj,
+            "preview_html": html,
+            "override": overrides.get(key),
+        })
+    return {"templates": out}
+
+
+@api.patch("/admin/email-templates/{key}")
+async def admin_email_template_update(key: str, body: EmailTemplateUpdate, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    update = {k: v for k, v in body.model_dump(exclude_unset=True).items()}
+    if update:
+        await db.email_template_overrides.update_one(
+            {"key": key},
+            {"$set": {**update, "key": key, "updated_at": now_iso()}},
+            upsert=True,
+        )
+    o = await db.email_template_overrides.find_one({"key": key}, {"_id": 0})
+    return {"override": o}
+
+
+@api.post("/admin/email-templates/{key}/send-test")
+async def admin_send_test_email(key: str, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    import email_templates as et
+    fe = os.environ.get("FRONTEND_BASE_URL", "")
+    ctx = {"frontend": fe, "name": user.get("name", "Robin"),
+           "topic": "your last drop", "title": "Sample title",
+           "preview": "Sample preview", "excerpt": "Sample excerpt",
+           "slug": "sample", "vault": False,
+           "matters": ["A", "B", "C"], "ignore": ["X"],
+           "one_resource": "The one resource",
+           "amount": "$22.00", "referred": "a new sovereign"}
+    subj, html = et.render(key, ctx)
+    rec = await email_service.send_email(user["email"], "[TEST] " + subj, html, kind=f"test_{key}")
+    return {"status": rec.get("status"), "id": rec.get("id")}
+
+
+# ============================================================
+#  ADMIN STATS (dashboard tiles)
+# ============================================================
+
+@api.get("/admin/stats")
+async def admin_stats(user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    return {
+        "members_active": await db.users.count_documents({"tier": {"$in": ["full", "foundational"]}}),
+        "members_full": await db.users.count_documents({"tier": "full"}),
+        "members_foundational": await db.users.count_documents({"tier": "foundational"}),
+        "members_canceled": await db.users.count_documents({"tier": "canceled"}),
+        "drops": await db.drops.count_documents({}),
+        "drops_published": await db.drops.count_documents({"published": True}),
+        "articles": await db.articles.count_documents({}),
+        "articles_published": await db.articles.count_documents({"published": True}),
+        "vault_articles": await db.articles.count_documents({"vault": True, "published": True}),
+        "leads": await db.leads.count_documents({}),
+        "waitlist": await db.waitlist.count_documents({}),
+        "emails_sent": await db.emails_outbox.count_documents({"status": "sent"}),
+        "emails_queued": await db.emails_outbox.count_documents({"status": {"$in": ["queued", "queued_no_key"]}}),
+    }
 
 
 # ---------- mount and CORS ----------

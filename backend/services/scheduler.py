@@ -1,4 +1,4 @@
-"""Background scheduler -- publishes scheduled drops, runs win-back, weekly win thread."""
+"""Background scheduler -- publishes scheduled drops & articles, win-back, weekly win thread."""
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
@@ -18,19 +18,49 @@ async def _publish_due_drops():
     async for d in cursor:
         await db.drops.update_one({"id": d["id"]}, {"$set": {"published": True, "published_at": now}})
         log.info("Auto-published drop %s", d.get("title"))
-        # Notify all active members
+        try:
+            import email_templates as et
+            subj, html = et.render("drop_published", {
+                "title": d["title"],
+                "preview": d.get("insight_preview") or "A new transmission just landed.",
+                "frontend": os.environ.get("FRONTEND_BASE_URL", ""),
+            })
+        except Exception:
+            subj, html = f"NEW DROP: {d['title']}", wrap_html(d["title"], "A new transmission landed.")
         async for u in db.users.find({"tier": {"$in": ["full", "foundational"]}}):
             if d.get("foundational") is False and u.get("tier") == "foundational":
-                continue  # foundational users only see foundational content
-            await send_email(
-                to=u["email"],
-                subject=f"NEW DROP: {d['title']}",
-                html=wrap_html(d["title"],
-                               f"<p>{d.get('insight_preview') or 'A new transmission just landed in your NOWREALM dashboard.'}</p>",
-                               cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/dashboard",
-                               cta_label="Open Dashboard"),
-                kind="drop_published",
-            )
+                continue
+            await send_email(u["email"], subj, html, kind="drop_published")
+
+
+async def _publish_due_articles():
+    db = get_db()
+    now = datetime.now(timezone.utc).isoformat()
+    cursor = db.articles.find({"published": False, "scheduled_for": {"$ne": None, "$lte": now}})
+    async for a in cursor:
+        await db.articles.update_one({"id": a["id"]}, {"$set": {"published": True, "published_at": now}})
+        log.info("Auto-published article %s", a.get("title"))
+        try:
+            import email_templates as et
+            subj, html = et.render("article_published", {
+                "title": a["title"],
+                "excerpt": a.get("excerpt") or "",
+                "slug": a["slug"],
+                "vault": a.get("vault", False),
+                "frontend": os.environ.get("FRONTEND_BASE_URL", ""),
+            })
+        except Exception:
+            subj, html = a["title"], wrap_html(a["title"], a.get("excerpt") or "")
+        if a.get("vault"):
+            # send to active members
+            async for u in db.users.find({"tier": {"$in": ["full", "foundational"]}}):
+                await send_email(u["email"], subj, html, kind="article_published_vault")
+        else:
+            # send to members + leads
+            async for u in db.users.find({"tier": {"$in": ["full", "foundational"]}}):
+                await send_email(u["email"], subj, html, kind="article_published")
+            async for lead in db.leads.find({}):
+                await send_email(lead["email"], subj, html, kind="article_published_lead")
 
 
 async def _winback_inactive():
@@ -38,11 +68,9 @@ async def _winback_inactive():
     threshold = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
     cursor = db.users.find({"tier": {"$in": ["full", "foundational"]}, "last_login": {"$lt": threshold}})
     async for u in cursor:
-        # don't re-email more than once a week
         last_wb = u.get("last_winback_at")
         if last_wb and last_wb > (datetime.now(timezone.utc) - timedelta(days=7)).isoformat():
             continue
-        # find most recent note as topic anchor; fallback to latest drop
         topic = "your dominion work"
         recent_note = await db.notes.find_one({"user_id": u["id"]}, sort=[("updated_at", -1)])
         if recent_note:
@@ -53,27 +81,18 @@ async def _winback_inactive():
             d = await db.drops.find_one({"published": True}, sort=[("published_at", -1)])
             if d:
                 topic = d.get("title", topic)
-        await send_email(
-            to=u["email"],
-            subject="I noticed you stepped away \u2014 a 2-minute shortcut",
-            html=wrap_html(
-                "I noticed you stepped away",
-                f"<p>I saw you were working on <strong>{topic}</strong> recently.</p>"
-                f"<p>Here is a 2-minute shortcut to break the next bottleneck: come back, open the dashboard, and write one sentence in the Weekly Win thread. That single act re-anchors the codes.</p>"
-                f"<p>Don\u2019t let Chronos eat your momentum. Kairos is still holding the door.</p>",
-                cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/dashboard",
-                cta_label="Re-enter NOWREALM",
-            ),
-            kind="winback",
-        )
+        try:
+            import email_templates as et
+            subj, html = et.render("winback", {"topic": topic, "frontend": os.environ.get("FRONTEND_BASE_URL", "")})
+        except Exception:
+            subj, html = "I noticed you stepped away", wrap_html("Step back in", f"<p>You were on {topic}.</p>")
+        await send_email(u["email"], subj, html, kind="winback")
         await db.users.update_one({"id": u["id"]}, {"$set": {"last_winback_at": now_iso()}})
 
 
 async def _ensure_weekly_win_thread():
-    """On Wednesdays (or every 7 days), make sure a 'biggest wins of the week' admin post exists."""
     db = get_db()
     now = datetime.now(timezone.utc)
-    # Use week-key YYYY-WW
     week_key = f"{now.year}-W{now.isocalendar().week:02d}"
     existing = await db.weekly_win_threads.find_one({"week_key": week_key})
     if existing:
@@ -93,6 +112,7 @@ async def _ensure_weekly_win_thread():
         "user_id": admin["id"],
         "user_name": admin.get("name", "Robin Angel"),
         "user_role": "admin",
+        "user_avatar": admin.get("avatar_url", ""),
         "body": body,
         "kind": "win",
         "pinned": True,
@@ -108,7 +128,6 @@ async def _ensure_weekly_win_thread():
 
 
 async def _publish_due_summaries():
-    """Send queued monthly summaries when their send_at passes."""
     db = get_db()
     now = now_iso()
     async for s in db.monthly_summaries.find({"sent": False, "send_at": {"$lte": now}}):
@@ -118,30 +137,62 @@ async def _publish_due_summaries():
 
 async def _send_summary(s: dict):
     db = get_db()
-    matters = "".join(f"<li>{m}</li>" for m in s.get("matters", []))
-    ignore = "".join(f"<li>{i}</li>" for i in s.get("ignore", []))
-    html = wrap_html(
-        "Monthly Executive Summary",
-        f"<h3 style='color:#D4AF37;font-family:Cormorant Garamond,serif'>What matters right now</h3><ul>{matters}</ul>"
-        f"<h3 style='color:#D4AF37;font-family:Cormorant Garamond,serif'>What to ignore</h3><ul>{ignore}</ul>"
-        f"<h3 style='color:#D4AF37;font-family:Cormorant Garamond,serif'>The one resource you need</h3><p>{s.get('one_resource','')}</p>",
-        cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/dashboard",
-        cta_label="Open Dashboard",
-    )
+    try:
+        import email_templates as et
+        subj, html = et.render("monthly_summary", {
+            "matters": s.get("matters", []),
+            "ignore": s.get("ignore", []),
+            "one_resource": s.get("one_resource", ""),
+            "frontend": os.environ.get("FRONTEND_BASE_URL", ""),
+        })
+    except Exception:
+        subj, html = "Monthly summary", wrap_html("Summary", "<p>See dashboard.</p>")
     async for u in db.users.find({"tier": {"$in": ["full", "foundational"]}}):
-        await send_email(u["email"], "NOWREALM \u2014 Executive Summary", html, kind="monthly_summary")
+        await send_email(u["email"], subj, html, kind="monthly_summary")
+
+
+async def ensure_indexes():
+    """Create useful indexes -- safe to call repeatedly."""
+    db = get_db()
+    try:
+        await db.users.create_index("email", unique=True)
+        await db.users.create_index("affiliate_code")
+        await db.users.create_index("tier")
+        await db.users.create_index("last_login")
+        await db.drops.create_index("id", unique=True)
+        await db.drops.create_index([("published", 1), ("scheduled_for", 1)])
+        await db.drops.create_index("published_at")
+        await db.articles.create_index("id", unique=True)
+        await db.articles.create_index("slug", unique=True)
+        await db.articles.create_index([("published", 1), ("vault", 1), ("published_at", -1)])
+        await db.articles.create_index("tags")
+        await db.posts.create_index([("deleted", 1), ("pinned", -1), ("created_at", -1)])
+        await db.posts.create_index("user_id")
+        await db.comments.create_index([("post_id", 1), ("created_at", 1)])
+        await db.notes.create_index([("user_id", 1), ("drop_id", 1)], unique=True)
+        await db.bookmarks.create_index([("user_id", 1), ("drop_id", 1)], unique=True)
+        await db.alacarte_unlocks.create_index([("user_id", 1), ("drop_id", 1)], unique=True)
+        await db.payment_transactions.create_index("session_id", unique=True)
+        await db.leads.create_index("email", unique=True)
+        await db.waitlist.create_index("email", unique=True)
+        await db.emails_outbox.create_index("created_at")
+        log.info("Mongo indexes ensured")
+    except Exception:
+        log.exception("ensure_indexes failed (continuing)")
 
 
 async def _loop():
+    await ensure_indexes()
     while True:
         try:
             await _publish_due_drops()
+            await _publish_due_articles()
             await _winback_inactive()
             await _ensure_weekly_win_thread()
             await _publish_due_summaries()
         except Exception:
             log.exception("scheduler tick failed")
-        await asyncio.sleep(60)  # tick every minute
+        await asyncio.sleep(60)
 
 
 def start():
