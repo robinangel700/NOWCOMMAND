@@ -1128,6 +1128,7 @@ async def admin_trigger_winback(user: dict = Depends(get_current_user)):
 async def admin_trigger_drops(user: dict = Depends(get_current_user)):
     await require_admin(user)
     await scheduler._publish_due_drops()
+    await scheduler._publish_due_articles()
     return {"status": "triggered"}
 
 
