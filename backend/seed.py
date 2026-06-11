@@ -113,6 +113,13 @@ async def seed_all():
     ]
     await db.checklist.delete_many({"title": {"$in": LEGACY_TITLES}, "done": False})
 
+    # Force-refresh description on the canonical items (handles wording updates like 'pronouns' removal).
+    for title, desc, link in DEFAULT_CHECKLIST:
+        await db.checklist.update_one(
+            {"title": title},
+            {"$set": {"description": desc, "link": link}},
+        )
+
     existing_titles = {it["title"] async for it in db.checklist.find({}, {"title": 1, "_id": 0})}
     if not existing_titles:
         for i, (title, desc, link) in enumerate(DEFAULT_CHECKLIST):
