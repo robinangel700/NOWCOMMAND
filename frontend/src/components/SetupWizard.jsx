@@ -131,7 +131,7 @@ export default function SetupWizard({ onClose }) {
           <div className="text-center">
             <Check className="w-12 h-12 text-gold mx-auto mb-4 animate-glow"/>
             <h2 className="font-display text-5xl text-cream">You're in.</h2>
-            <p className="text-textMuted mt-3">The codes are moving. Wednesday's drop is already scheduled.</p>
+            <p className="text-textMuted mt-3">The codes are moving. Saturday's drop is already scheduled.</p>
             <button data-testid="wiz-complete" onClick={complete} className="btn-gold mt-8">Enter the realm</button>
           </div>
         )}

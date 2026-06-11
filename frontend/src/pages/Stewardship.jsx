@@ -18,7 +18,7 @@ import { toast } from "sonner";
 */
 
 const LOST_LIST = [
-  "Every Wednesday drop you've collected and the ones still scheduled",
+  "Every Saturday drop you've collected and the ones still scheduled",
   "Your saved notes per drop",
   "Your bookmarks and private progress metrics",
   "Your seat in the Sovereign Community Vault",

@@ -89,7 +89,7 @@ def ensure_pdf(force: bool = False) -> str:
         "1. Log into your NOWCOMMAND dashboard.<br/>"
         "2. Read the One Page Manifesto in the Community Vault.<br/>"
         "3. Post one sentence in the Weekly Biggest Win thread &mdash; even if your win is just &lsquo;I showed up.&rsquo;<br/>"
-        "4. Wait for Wednesday. The drop is already scheduled.",
+        "4. Wait for Saturday. The drop is already scheduled.",
         body))
     story.append(Spacer(1, 24))
 

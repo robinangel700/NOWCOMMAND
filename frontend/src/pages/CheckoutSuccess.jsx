@@ -81,7 +81,7 @@ export default function CheckoutSuccess() {
               <button data-testid="go-dashboard" onClick={() => nav("/dashboard")} className="btn-ghost">Enter your dashboard</button>
             </div>
             <ul className="mt-10 space-y-3 text-sm text-textMuted">
-              {["Read the codes once tonight.","Open the Manifesto in the Community Vault.","Post in the Weekly Biggest Win thread.","Wednesday's drop is already scheduled."].map((s,i)=>(
+              {["Read the codes once tonight.","Open the Manifesto in the Community Vault.","Post in the Weekly Biggest Win thread.","Saturday's drop is already scheduled."].map((s,i)=>(
                 <li key={i} className="flex gap-3"><Check className="w-4 h-4 text-gold mt-0.5"/>{s}</li>
               ))}
             </ul>

@@ -21,7 +21,7 @@ def _onboarding(ctx: Dict) -> Tuple[str, str]:
             "<li>Open the Community Vault and read the One Page Manifesto.</li>"
             "<li>Set your profile (avatar, bio) so the community knows who just walked in.</li>"
             "<li>Post one sentence in the Weekly Biggest Win thread — even &lsquo;I showed up&rsquo; counts.</li>"
-            "<li>Wednesday's drop is already scheduled. Watch the dashboard.</li>"
+            "<li>Saturday's drop is already scheduled. Watch the dashboard.</li>"
             "</ol>"
             "<p style='margin-top:24px'>You are not subscribing. You are crossing a threshold.</p>",
             cta_url=f"{fe}/dashboard?wizard=1",

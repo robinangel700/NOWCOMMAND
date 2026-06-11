@@ -22,7 +22,7 @@ export function VaultIndex() {
             {articles.map((a) => (
               <Link key={a.id} to={`/vault/${a.slug}`} data-testid={`vault-${a.slug}`} className="bg-void p-7 group hover:bg-surface">
                 {a.cover_image_url && (
-                  <div className="-m-7 mb-5 h-44 overflow-hidden">
+                  <div className="h-44 -mx-7 -mt-7 mb-5 overflow-hidden">
                     <img src={a.cover_image_url} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"/>
                   </div>
                 )}

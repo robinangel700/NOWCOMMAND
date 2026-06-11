@@ -76,7 +76,7 @@ export default function Landing() {
             <div className="mt-10 flex items-center gap-6 text-xs font-mono uppercase tracking-[0.25em] text-textDim">
               <span data-testid="seats-counter">{state?.active_members ?? 0} / {state?.cap ?? 300} seats taken</span>
               <span>&middot;</span>
-              <span>Wednesday drops</span>
+              <span>Saturday drops</span>
               <span>&middot;</span>
               <span>Auto-renew</span>
             </div>
@@ -113,7 +113,7 @@ export default function Landing() {
               {blog.articles.slice(0, 6).map((a) => (
                 <Link key={a.id} to={`/blog/${a.slug}`} data-testid={`landing-article-${a.slug}`} className="bg-void p-7 group hover:bg-surface transition-colors">
                   {a.cover_image_url && (
-                    <div className="-m-7 mb-5 h-44 overflow-hidden">
+                    <div className="h-44 -mx-7 -mt-7 mb-5 overflow-hidden">
                       <img src={a.cover_image_url} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"/>
                     </div>
                   )}
@@ -205,7 +205,7 @@ export default function Landing() {
           <h2 className="font-display text-4xl md:text-6xl text-cream max-w-3xl leading-[1.05]">The vault. The drops. The community. The codes.</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mt-16">
             {[
-              ["Wednesday Drops", "A new transmission every Wednesday, scheduled and pre-loaded. You see what's coming before it lands."],
+              ["Saturday Drops", "A new transmission every Saturday, scheduled and pre-loaded. You see what's coming before it lands."],
               ["The Activation Codes PDF", "Instant download the moment you cross the threshold. Read once tonight. Read again tomorrow."],
               ["Personalized Dashboard", "Saved progress, private metrics, custom learning paths, your own atmosphere."],
               ["Quizzes & Notes", "Notes per drop, bookmarks, quiz attempts — a real archive of your dominion work."],

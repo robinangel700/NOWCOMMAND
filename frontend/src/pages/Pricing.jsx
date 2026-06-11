@@ -51,7 +51,7 @@ export default function Pricing() {
       cadence: "/mo",
       tag: promo ? "FOUNDER PRICE" : "STANDARD",
       desc: "Full access. Community. All drops. The Activation Codes PDF.",
-      features: ["All Wednesday drops", "Sovereign Community access", "Notes, bookmarks, quizzes", "Activation Codes PDF instant download", "Monthly quick-win asset", "Monthly executive summary"],
+      features: ["All Saturday drops", "Sovereign Community access", "Notes, bookmarks, quizzes", "Activation Codes PDF instant download", "Monthly quick-win asset", "Monthly executive summary"],
       highlight: true,
     },
     {

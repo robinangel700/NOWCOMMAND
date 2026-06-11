@@ -41,7 +41,7 @@ export function BlogIndex() {
           {data.articles.map((a) => (
             <Link key={a.id} to={`/blog/${a.slug}`} data-testid={`article-${a.slug}`} className="bg-void p-7 group hover:bg-surface transition-colors">
               {a.cover_image_url && (
-                <div className="-m-7 mb-5 h-44 overflow-hidden">
+                <div className="h-44 -mx-7 -mt-7 mb-5 overflow-hidden">
                   <img src={a.cover_image_url} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"/>
                 </div>
               )}
@@ -71,7 +71,7 @@ export function BlogIndex() {
                 <div key={a.id} className="bg-void p-7 relative overflow-hidden" data-testid={`vault-peek-${a.slug}`}>
                   <div className="absolute top-4 right-4 flex items-center gap-1 overline"><Lock className="w-3 h-3"/>VAULT</div>
                   {a.cover_image_url && (
-                    <div className="-m-7 mb-5 h-44 overflow-hidden">
+                    <div className="h-44 -mx-7 -mt-7 mb-5 overflow-hidden">
                       <img src={a.cover_image_url} alt="" loading="lazy" className="w-full h-full object-cover opacity-60"/>
                     </div>
                   )}

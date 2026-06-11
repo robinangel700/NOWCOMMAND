@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { marked } from "marked";
 import { api } from "../lib/api";
 
 export function LegalPage() {
@@ -7,15 +8,14 @@ export function LegalPage() {
   const [d, setD] = useState(null);
   useEffect(() => { api.get(`/public/legal/${doc}`).then((r) => { setD(r.data); document.title = `${r.data.title} · NOWCOMMAND`; }); }, [doc]);
   if (!d) return null;
+  const html = marked.parse(d.body_md || "");
   return (
     <div className="min-h-screen px-4 sm:px-6 lg:px-10 py-16">
       <div className="max-w-3xl mx-auto">
         <div className="overline mb-3">// LEGAL · UPDATED {d.updated}</div>
         <h1 className="font-display text-4xl sm:text-5xl md:text-6xl text-cream">{d.title}</h1>
         <div className="gold-line my-8"/>
-        <article className="prose prose-invert max-w-none">
-          <pre className="whitespace-pre-wrap font-body text-cream/90 leading-[1.8]">{d.body_md}</pre>
-        </article>
+        <div className="legal-prose font-body text-cream/90 leading-[1.8]" dangerouslySetInnerHTML={{__html: html}}/>
       </div>
     </div>
   );

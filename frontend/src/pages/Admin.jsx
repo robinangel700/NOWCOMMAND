@@ -804,31 +804,73 @@ function BrandTab() {
   const [b, setB] = useState(null);
   useEffect(() => { api.get("/public/brand").then((r) => setB(r.data)); }, []);
   if (!b) return null;
-  const save = async () => { await api.post("/admin/brand", b); toast.success("Brand saved · refresh to apply"); };
-  const field = (k, label, type = "text") => (
-    <div><label className="overline">{label}</label><input type={type} value={b[k] || ""} onChange={(e) => setB({ ...b, [k]: e.target.value })}/></div>
+  const save = async () => {
+    await api.post("/admin/brand", b);
+    // apply live without reload
+    const root = document.documentElement;
+    if (b.primary_hex) root.style.setProperty("--brand-gold", b.primary_hex);
+    if (b.primary_hi_hex) root.style.setProperty("--brand-gold-hi", b.primary_hi_hex);
+    if (b.ink_hex) root.style.setProperty("--brand-cream", b.ink_hex);
+    if (b.bg_hex) root.style.setProperty("--brand-void", b.bg_hex);
+    if (b.surface_hex) root.style.setProperty("--brand-surface", b.surface_hex);
+    if (b.border_hex) root.style.setProperty("--brand-border", b.border_hex);
+    toast.success("Brand saved · applied live");
+  };
+  // Auto-derive harmonious ombre when primary changes
+  const lighten = (hex, amt) => {
+    const n = parseInt(hex.replace("#",""), 16);
+    const r = Math.min(255, ((n >> 16) & 255) + amt);
+    const g = Math.min(255, ((n >> 8) & 255) + amt);
+    const bl = Math.min(255, (n & 255) + amt);
+    return "#" + [r,g,bl].map(x => x.toString(16).padStart(2,"0")).join("");
+  };
+  const setPrimary = (hex) => setB({ ...b, primary_hex: hex, primary_hi_hex: lighten(hex, 18) });
+  const colorField = (k, label, onChange) => (
+    <div>
+      <label className="overline">{label}</label>
+      <div className="flex items-center gap-3 mt-2">
+        <input type="color" value={b[k] || "#000000"} onChange={(e) => (onChange ? onChange(e.target.value) : setB({ ...b, [k]: e.target.value }))} style={{width:56,height:40,padding:0,border:"1px solid #332D21"}}/>
+        <input value={b[k] || ""} onChange={(e) => (onChange ? onChange(e.target.value) : setB({ ...b, [k]: e.target.value }))} className="font-mono" style={{maxWidth:140}}/>
+      </div>
+    </div>
+  );
+  const fontOptions = ["Cormorant Garamond","Outfit","Inter","Playfair Display","Lora","DM Serif Display","Manrope","JetBrains Mono","Space Mono","Crimson Pro"];
+  const fontField = (k, label) => (
+    <div>
+      <label className="overline">{label}</label>
+      <select value={b[k] || ""} onChange={(e) => setB({ ...b, [k]: e.target.value })}>
+        {fontOptions.map((f) => <option key={f} value={f}>{f}</option>)}
+      </select>
+    </div>
   );
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5 max-w-3xl">
       <div className="overline">// BRAND · APPLIED SITE-WIDE</div>
-      {field("site_name", "// SITE NAME")}
-      {field("tagline", "// TAGLINE")}
-      <div className="grid sm:grid-cols-2 gap-5">
-        {field("primary_hex", "// PRIMARY (gold)")}
-        {field("primary_hi_hex", "// PRIMARY HI")}
-        {field("ink_hex", "// TEXT (cream)")}
-        {field("bg_hex", "// BACKGROUND")}
-        {field("surface_hex", "// SURFACE")}
-        {field("border_hex", "// BORDER")}
+      <div><label className="overline">// SITE NAME</label><input value={b.site_name || ""} onChange={(e) => setB({ ...b, site_name: e.target.value })}/></div>
+      <div><label className="overline">// TAGLINE</label><input value={b.tagline || ""} onChange={(e) => setB({ ...b, tagline: e.target.value })}/></div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {colorField("primary_hex", "// PRIMARY (auto-derives hover)", setPrimary)}
+        {colorField("primary_hi_hex", "// PRIMARY HOVER")}
+        {colorField("ink_hex", "// TEXT")}
+        {colorField("bg_hex", "// BACKGROUND")}
+        {colorField("surface_hex", "// SURFACE")}
+        {colorField("border_hex", "// BORDER")}
+      </div>
+      <div className="panel p-5">
+        <div className="overline mb-3">// LIVE PREVIEW</div>
+        <div style={{background:b.bg_hex,color:b.ink_hex,padding:24,borderRadius:0,border:`1px solid ${b.border_hex}`}}>
+          <div style={{color:b.primary_hex,fontFamily:"JetBrains Mono",letterSpacing:"0.3em",fontSize:11,marginBottom:8}}>// {b.site_name?.toUpperCase()}</div>
+          <div style={{fontFamily:b.display_font || "Cormorant Garamond",fontSize:32,lineHeight:1.1}}>The increase obeys the steward.</div>
+          <button style={{background:b.primary_hex,color:b.bg_hex,padding:"12px 24px",marginTop:16,letterSpacing:"0.12em",textTransform:"uppercase",fontSize:12,fontFamily:b.body_font || "Outfit",border:0}}>Sample button</button>
+        </div>
       </div>
       <div className="grid sm:grid-cols-3 gap-5">
-        {field("display_font", "// DISPLAY FONT")}
-        {field("body_font", "// BODY FONT")}
-        {field("mono_font", "// MONO FONT")}
+        {fontField("display_font", "// DISPLAY FONT")}
+        {fontField("body_font", "// BODY FONT")}
+        {fontField("mono_font", "// MONO FONT")}
       </div>
-      {field("logo_url", "// LOGO URL (optional)")}
-      <button data-testid="brand-save" onClick={save} className="btn-gold">Save brand</button>
-      <p className="text-textDim text-xs font-mono">Colors update live on the site. Some changes (fonts) take effect on next reload.</p>
+      <div><label className="overline">// LOGO URL (optional)</label><input value={b.logo_url || ""} onChange={(e) => setB({ ...b, logo_url: e.target.value })}/></div>
+      <button data-testid="brand-save" onClick={save} className="btn-gold">Save brand & apply live</button>
     </div>
   );
 }
@@ -838,15 +880,25 @@ function PricingTab() {
   const [p, setP] = useState(null);
   useEffect(() => { api.get("/admin/pricing").then((r) => setP(r.data)); }, []);
   if (!p) return null;
-  const save = async () => { await api.post("/admin/pricing", p); toast.success("Pricing saved"); };
+  const save = async () => { await api.post("/admin/pricing", p); toast.success("Pricing saved (applies on next /pricing visit)"); };
+  const dollarInput = (k, label) => (
+    <div>
+      <label className="overline">{label}</label>
+      <div className="flex items-center gap-2">
+        <span className="text-gold text-xl">$</span>
+        <input type="number" step="0.01" value={(p[k] || 0) / 100} onChange={(e) => setP({ ...p, [k]: Math.round(Number(e.target.value) * 100) })}/>
+      </div>
+    </div>
+  );
   return (
     <div className="space-y-5 max-w-2xl">
       <div className="overline">// PRICING & OFFER VISIBILITY</div>
-      <div><label className="overline">// FULL MONTHLY (cents)</label><input type="number" value={p.full_monthly_cents} onChange={(e) => setP({ ...p, full_monthly_cents: Number(e.target.value) })}/></div>
-      <div><label className="overline">// AFTER-PROMO MONTHLY (cents)</label><input type="number" value={p.full_after_promo_monthly_cents} onChange={(e) => setP({ ...p, full_after_promo_monthly_cents: Number(e.target.value) })}/></div>
-      <div><label className="overline">// ANNUAL (cents)</label><input type="number" value={p.full_annual_cents} onChange={(e) => setP({ ...p, full_annual_cents: Number(e.target.value) })}/></div>
-      <div><label className="overline">// FOUNDATIONAL MONTHLY (cents)</label><input type="number" value={p.foundational_monthly_cents} onChange={(e) => setP({ ...p, foundational_monthly_cents: Number(e.target.value) })}/></div>
-      <div><label className="overline">// PROMO DAYS</label><input type="number" value={p.promo_days} onChange={(e) => setP({ ...p, promo_days: Number(e.target.value) })}/></div>
+      <p className="text-textMuted text-sm">Enter dollar amounts. We auto-convert to cents for Stripe. <strong className="text-cream">Important:</strong> changes here only apply to NEW subscriptions. Existing members keep their original Stripe price until they cancel/re-subscribe. To update existing members in bulk, use the Stripe Dashboard.</p>
+      {dollarInput("full_monthly_cents", "// FOUNDER MONTHLY PRICE")}
+      {dollarInput("full_after_promo_monthly_cents", "// POST-PROMO MONTHLY PRICE")}
+      {dollarInput("full_annual_cents", "// ANNUAL PRICE")}
+      {dollarInput("foundational_monthly_cents", "// FOUNDATIONAL (DOWNGRADE) PRICE")}
+      <div><label className="overline">// PROMO WINDOW (days)</label><input type="number" value={p.promo_days} onChange={(e) => setP({ ...p, promo_days: Number(e.target.value) })}/></div>
       <div><label className="overline">// MEMBERSHIP CAP</label><input type="number" value={p.cap} onChange={(e) => setP({ ...p, cap: Number(e.target.value) })}/></div>
       <label className="flex items-center gap-2 text-sm text-textMuted"><input type="checkbox" checked={!!p.show_foundational_publicly} onChange={(e) => setP({ ...p, show_foundational_publicly: e.target.checked })} style={{width:16,height:16}}/>Show $11 Foundational publicly on /pricing</label>
       <button data-testid="pricing-save" onClick={save} className="btn-gold">Save pricing</button>

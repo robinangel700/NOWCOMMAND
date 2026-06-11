@@ -1356,6 +1356,8 @@ async def admin_create_article(body: ArticleIn, user: dict = Depends(get_current
         "sales_copy_md": body.sales_copy_md or "",
         "optin_headline": body.optin_headline or "",
         "optin_cta": body.optin_cta or "",
+        "post_kind": body.post_kind,
+        "youtube_url": body.youtube_url or "",
         "published": published,
         "published_at": published_at,
         "views": 0,
@@ -1680,8 +1682,39 @@ async def submit_testimonial(body: TestimonialIn, user: dict = Depends(get_curre
 @api.get("/public/testimonials")
 async def public_testimonials():
     db = get_db()
+    # Hide entire page until admin enables it (auto-enables once first testimonial is featured/approved)
+    setting = await _get_setting("testimonials_published")
     rows = await db.testimonials.find({"status": {"$in": ["approved", "featured"]}}, {"_id": 0}).sort([("status", -1), ("created_at", -1)]).limit(50).to_list(50)
-    return {"testimonials": rows}
+    published = bool(setting) if setting is not None else (len(rows) > 0)
+    return {"testimonials": rows if published else [], "published": published}
+
+
+@api.post("/admin/testimonials/publish")
+async def admin_testimonials_publish(payload: dict, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    await _set_setting("testimonials_published", bool(payload.get("published")))
+    return {"published": bool(payload.get("published"))}
+
+
+@api.patch("/admin/members/{member_id}")
+async def admin_edit_member(member_id: str, payload: dict, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    db = get_db()
+    allowed = {"name", "bio", "tier", "avatar_url", "cover_image_url", "is_active"}
+    update = {k: v for k, v in (payload or {}).items() if k in allowed}
+    if update:
+        await db.users.update_one({"id": member_id}, {"$set": update})
+    return {"status": "ok"}
+
+
+@api.patch("/admin/members/{member_id}/note")
+async def admin_member_private_note(member_id: str, payload: dict, user: dict = Depends(get_current_user)):
+    """Private admin note never shown to the member."""
+    await require_admin(user)
+    db = get_db()
+    note = (payload or {}).get("note", "")
+    await db.users.update_one({"id": member_id}, {"$set": {"admin_note": note, "admin_note_at": now_iso()}})
+    return {"status": "ok"}
 
 
 @api.get("/admin/testimonials")
@@ -2025,7 +2058,7 @@ async def admin_health(user: dict = Depends(get_current_user)):
     if inactive_14 > 0: alerts.append({"level": "info", "msg": f"{inactive_14} member(s) inactive 14+ days — the win-back scheduler is handling them. Consider a personal DM to the top 3."})
     if failed_payments > 0: alerts.append({"level": "warn", "msg": f"{failed_payments} failed payment(s) on file — Stripe is auto-retrying. Review in /admin?tab=members."})
     if pending_testimonials >= 3: alerts.append({"level": "info", "msg": f"{pending_testimonials} testimonials waiting — approve in /admin?tab=testimonials."})
-    if drops_scheduled == 0: alerts.append({"level": "warn", "msg": "No drops scheduled — Wednesday's transmission needs to be queued."})
+    if drops_scheduled == 0: alerts.append({"level": "warn", "msg": "No drops scheduled — Saturday's transmission needs to be queued."})
     if seats_left <= 30 and seats_left > 0: alerts.append({"level": "info", "msg": f"Only {seats_left} seats left before doors close — raise the price?"})
     if seats_left <= 0: alerts.append({"level": "info", "msg": "Doors are closed. Time to raise the price and open a waitlist phase."})
     if not alerts: alerts.append({"level": "good", "msg": "All systems healthy. Stay in praise. Keep dropping."})
@@ -2055,7 +2088,7 @@ async def public_faq():
             {"q": "How do I access my membership after paying?", "a": "You're redirected automatically to /checkout/success the moment Stripe confirms payment. From there you can download the Mammon Breaker Activation Codes PDF and the Dominion Over Mammon welcome book, and the Setup Wizard walks you through the first 60 seconds."},
             {"q": "Where do I download the Activation Codes / Welcome Book?", "a": "Dashboard top-right has both download buttons. They're also emailed to you in the onboarding email."},
             {"q": "I didn't get my welcome email.", "a": "Check spam. Add robinangel700@gmail.com to your contacts. You can still download both PDFs from your dashboard right now."},
-            {"q": "What happens every Wednesday?", "a": "A new drop auto-publishes to your dashboard and a gold-banner post lands in the community. You'll be emailed too — unless you turn that off in your notification preferences."},
+            {"q": "What happens every Saturday?", "a": "A new drop auto-publishes to your dashboard and a gold-banner post lands in the community. You'll be emailed too — unless you turn that off in your notification preferences."},
         ]},
         {"title": "Billing & Money", "qa": [
             {"q": "How does billing work?", "a": "Stripe auto-renews monthly or annually. You can update your card in the Stripe portal from /stewardship at any time. Stripe also handles smart-retry if a payment fails."},

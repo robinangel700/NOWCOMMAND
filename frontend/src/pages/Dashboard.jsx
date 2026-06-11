@@ -125,7 +125,7 @@ export default function Dashboard() {
               ))}
               {published.length === 0 && (
                 <div className="panel p-8 text-center">
-                  <p className="text-textMuted">No drops have landed yet. Wednesday is coming.</p>
+                  <p className="text-textMuted">No drops have landed yet. Saturday is coming.</p>
                 </div>
               )}
             </div>

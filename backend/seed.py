@@ -12,7 +12,7 @@ DEFAULT_CHECKLIST = [
     ("Approve the community house rules", "Admin > Community > Rules. Edit or accept defaults.", "/admin?tab=community"),
     ("Write 3 free blog posts", "Admin > Articles > New. Mark vault=OFF. Free posts are the hero of the public site and drive opt-ins.", "/admin?tab=articles"),
     ("Write 5 vault articles (members only)", "Admin > Articles > New, mark vault=ON. These are enticing previews on the public blog and full reads inside the membership.", "/admin?tab=articles"),
-    ("Schedule the first 4 Wednesday drops", "Admin > Drops > New. Set scheduled_for to the next 4 Wednesdays.", "/admin?tab=drops"),
+    ("Schedule the first 4 Saturday drops", "Admin > Drops > New. Set scheduled_for to the next 4 Saturdays.", "/admin?tab=drops"),
     ("Record 1 monthly quick-win asset (under 15 min)", "Upload as a Drop with Quick Win checked.", "/admin?tab=drops"),
     ("Set up your first a-la-carte drop", "Drop form, set alacarte_price_cents to enable single-asset purchase.", "/admin?tab=drops"),
     ("Customize your KingdomTitleDeed.com upsell", "Admin > Settings > Upsell (in Launch tab). Used for monthly upsell emails inside the membership.", "/admin?tab=launch"),
@@ -105,7 +105,7 @@ async def seed_all():
     # Remove legacy MVP titles that have been superseded by new richer items
     LEGACY_TITLES = [
         "Upload final Mammon Breaker Activation Codes PDF",
-        "Schedule your first 4 Wednesday Drops",
+        "Schedule your first 4 Saturday Drops",
         "Set this month's Executive Summary",
         "Decide first a-la-carte drop & price",
         "Set KingdomTitleDeed upsell copy",

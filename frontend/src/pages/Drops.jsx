@@ -210,7 +210,7 @@ export function DropsList() {
       <div className="max-w-6xl mx-auto">
         <div className="overline mb-4">// THE ARCHIVE</div>
         <h1 className="font-display text-4xl sm:text-5xl md:text-6xl text-cream">All drops</h1>
-        <p className="text-textMuted mt-3">Wednesday after Wednesday. The vault stays open while your seat does.</p>
+        <p className="text-textMuted mt-3">Saturday after Saturday. The vault stays open while your seat does.</p>
         <h2 className="font-display text-2xl text-cream mt-16 mb-4">Published</h2>
         <div className="space-y-3">
           {published.map((d) => (

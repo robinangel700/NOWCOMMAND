@@ -123,7 +123,7 @@ class ManifestoIn(BaseModel):
 
 class ArticleIn(BaseModel):
     title: str
-    slug: Optional[str] = None  # auto-generated if empty
+    slug: Optional[str] = None
     subtitle: Optional[str] = None
     excerpt: Optional[str] = None
     body_md: str
@@ -134,9 +134,11 @@ class ArticleIn(BaseModel):
     og_image_url: Optional[str] = None
     vault: bool = False
     scheduled_for: Optional[str] = None
-    sales_copy_md: Optional[str] = None  # custom sales pitch shown at bottom of free articles
+    sales_copy_md: Optional[str] = None
     optin_headline: Optional[str] = None
     optin_cta: Optional[str] = None
+    post_kind: Literal["essay", "youtube", "short", "video"] = "essay"
+    youtube_url: Optional[str] = None
 
 
 class ArticleUpdate(BaseModel):
