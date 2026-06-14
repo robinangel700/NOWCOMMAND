@@ -3,13 +3,7 @@ import axios from "axios";
 export const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
 
-export const api = axios.create({ baseURL: API });
-
-api.interceptors.request.use((cfg) => {
-  const t = localStorage.getItem("nowcommand_token");
-  if (t) cfg.headers.Authorization = `Bearer ${t}`;
-  return cfg;
-});
+export const api = axios.create({ baseURL: API, withCredentials: true });
 
 api.interceptors.response.use(
   (r) => r,
@@ -31,12 +25,12 @@ export const fmt = {
     if (!iso) return "";
     try {
       return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-    } catch { return iso; }
+    } catch (e) { console.error("Date formatting failed", e); return iso; }
   },
   datetime(iso) {
     if (!iso) return "";
     try {
       return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-    } catch { return iso; }
+    } catch (e) { console.error("Datetime formatting failed", e); return iso; }
   },
 };

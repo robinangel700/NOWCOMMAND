@@ -126,7 +126,7 @@ function SalesWizard({ link, step, setStep, copy, earnings }) {
       {/* progress dots */}
       <div className="flex items-center gap-2 mt-6 flex-wrap">
         {STEPS.map((st, i) => (
-          <button key={i} data-testid={`wizard-step-${i}`} onClick={() => setStep(i)}
+          <button key={st.title} data-testid={`wizard-step-${i}`} onClick={() => setStep(i)}
             className={`h-2 rounded-full transition-all ${i === step ? "w-10 bg-gold" : "w-6 bg-borderGold hover:bg-goldHi"}`} aria-label={`Step ${i + 1}`} />
         ))}
         <span className="overline ml-2">{step + 1} / {STEPS.length}</span>
@@ -141,17 +141,17 @@ function SalesWizard({ link, step, setStep, copy, earnings }) {
 
         {s.points && (
           <ul className="mt-4 space-y-2">
-            {s.points.map((p, i) => <li key={i} className="flex gap-3 text-textMuted"><ChevronRight className="w-4 h-4 text-gold shrink-0 mt-1"/><span>{p}</span></li>)}
+            {s.points.map((p, i) => <li key={p} className="flex gap-3 text-textMuted"><ChevronRight className="w-4 h-4 text-gold shrink-0 mt-1"/><span>{p}</span></li>)}
           </ul>
         )}
 
         {s.scripts && (
           <div className="mt-5 space-y-4">
-            {s.scripts.map((sc, i) => (
-              <div key={i} className="bg-void border border-borderGold p-4">
+            {s.scripts.map((sc) => (
+              <div key={sc.label} className="bg-void border border-borderGold p-4">
                 <div className="overline mb-2">{sc.label}</div>
                 <p className="text-cream/95 text-sm whitespace-pre-wrap leading-relaxed">{sc.text}</p>
-                <button data-testid={`wizard-copy-${step}-${i}`} onClick={() => copy(sc.text)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/> Copy script</button>
+                <button data-testid={`wizard-copy-${step}-${sc.label.slice(0,8)}`} onClick={() => copy(sc.text)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/> Copy script</button>
               </div>
             ))}
           </div>
@@ -159,8 +159,8 @@ function SalesWizard({ link, step, setStep, copy, earnings }) {
 
         {s.objections && (
           <div className="mt-5 space-y-3">
-            {s.objections.map((o, i) => (
-              <div key={i} className="bg-void border border-borderGold p-4">
+            {s.objections.map((o) => (
+              <div key={o.q} className="bg-void border border-borderGold p-4">
                 <div className="font-display text-lg text-gold">{o.q}</div>
                 <p className="text-cream/90 text-sm mt-2 leading-relaxed">{o.a}</p>
                 <button onClick={() => copy(o.a)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/> Copy answer</button>

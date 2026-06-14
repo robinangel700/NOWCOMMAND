@@ -93,5 +93,40 @@ def ensure_pdf(force: bool = False) -> str:
         body))
     story.append(Spacer(1, 24))
 
+    # ---- BONUS: The Field Notes (Dominion Over Mammon) appended to the Codes ----
+    story.append(PageBreak())
+    story.append(Paragraph("BONUS CODEX // THE FIELD NOTES", over))
+    story.append(Paragraph("Dominion Over Mammon<br/>&amp; The Spirit of Delay", title))
+    story.append(Spacer(1, 14))
+    story.append(Paragraph(
+        "A field guide for the steward who refuses to wait. Mammon is not money &mdash; it is the spirit that "
+        "uses money to enslave. Chronos is its sibling &mdash; the spirit that teaches you to bow to the clock. "
+        "These seven notes evict both.",
+        body))
+    field_notes = [
+        ("I &mdash; Naming the Spirit",
+         "Mammon is recognized by the way it makes you feel: anxious about the future, ashamed of the past, suspicious of generosity. The first act of dominion is naming what you have been bowing to. Once named, it loses its hiding place."),
+        ("II &mdash; Operating in Kairos",
+         "Kairos is the appointed moment when heaven and earth agree. It cannot be scheduled, only recognized. Stay ready, stay obedient, refuse counterfeit urgency. Move when resources align, peace runs underneath, and obedience won't let go."),
+        ("III &mdash; The Stewardship Mind",
+         "Money is a courier carrying instructions. Stewards send money on assignments; servants of Mammon receive money's assignments. Before you tithe your income, tithe your imagination &mdash; rehearse kingdom expansion, not survival."),
+        ("IV &mdash; Sovereign Rest",
+         "Hustle culture is Mammon's liturgy. You will produce more from 4 rested hours than 14 frantic ones. Block 90 minutes this week with no input &mdash; no phone, no podcast, no agenda. That is where the codes download."),
+        ("V &mdash; The Compression",
+         "When you operate from Kairos and stewardship, the timeline bends. Years of stagnation compress into months of acceleration. Do not flinch. Do not negotiate the speed down. Receive it and obey the next instruction."),
+        ("VI &mdash; The Family Atmosphere",
+         "Your bloodline is listening. Speak over your household by name. Cancel one inherited verdict ('we are always behind') and replace it out loud with the new verdict. Atmosphere is the ceiling your children inherit &mdash; raise it on purpose."),
+        ("VII &mdash; The 30-Day Activation",
+         "For thirty days: read the Codes each morning; speak over your household at night; block 90 minutes of stillness weekly; send one instruction to your money daily; refuse one 'someday' item each week and execute it before midnight."),
+    ]
+    for h, p in field_notes:
+        story.append(Paragraph(h, h2))
+        story.append(Paragraph(p, body))
+    story.append(Spacer(1, 18))
+    story.append(Paragraph(
+        "May your hand be steady, your eye clear, and your timing divine. May the spirit of Mammon find no "
+        "foothold, and the spirit of delay no welcome. &mdash; Robin Angel",
+        foot))
+
     doc.build(story, onFirstPage=page_decoration, onLaterPages=page_decoration)
     return PDF_PATH

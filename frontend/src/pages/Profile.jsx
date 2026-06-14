@@ -48,20 +48,20 @@ export function MyProfile() {
     e?.preventDefault?.();
     setBusy(true);
     try { await api.patch("/me/profile", form); await refresh(); toast.success("Profile saved"); }
-    catch { toast.error("Save failed"); } finally { setBusy(false); }
+    catch (e) { console.error("Profile save failed", e); toast.error("Save failed"); } finally { setBusy(false); }
   };
 
   const onAvatarFile = async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     setBusy(true);
     try { const url = await uploadImage(f, "avatar"); setForm({ ...form, avatar_url: url }); toast.success("Avatar uploaded"); }
-    catch { toast.error("Upload failed"); } finally { setBusy(false); }
+    catch (e) { console.error("Avatar upload failed", e); toast.error("Upload failed"); } finally { setBusy(false); }
   };
   const onCoverFile = async (e) => {
     const f = e.target.files?.[0]; if (!f) return;
     setBusy(true);
     try { const url = await uploadImage(f, "cover"); setForm({ ...form, cover_image_url: url, cover_position_y: 50 }); toast.success("Cover uploaded"); }
-    catch { toast.error("Upload failed"); } finally { setBusy(false); }
+    catch (e) { console.error("Cover upload failed", e); toast.error("Upload failed"); } finally { setBusy(false); }
   };
 
   // Drag to reposition cover (vertical only — keeps mobile + desktop simple)

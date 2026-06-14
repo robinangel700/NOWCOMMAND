@@ -7,6 +7,7 @@ class SignupIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     name: Optional[str] = None
+    ref: Optional[str] = None  # affiliate referral code
 
 
 class LoginIn(BaseModel):
@@ -22,6 +23,7 @@ class TokenOut(BaseModel):
 class CheckoutIn(BaseModel):
     plan: Literal["full_monthly", "full_annual", "foundational_monthly"]
     origin_url: str
+    ref: Optional[str] = None  # affiliate referral code
 
 
 class AlacarteCheckoutIn(BaseModel):
@@ -248,6 +250,9 @@ class NotifPrefsIn(BaseModel):
     admin_on_testimonial: Optional[bool] = None
     admin_on_lead: Optional[bool] = None
     admin_on_payment_failed: Optional[bool] = None
+    admin_on_payment_succeeded: Optional[bool] = None
+    admin_on_subscription_paused: Optional[bool] = None
+    admin_on_subscription_resumed: Optional[bool] = None
     admin_digest_frequency: Optional[Literal["instant", "hourly", "daily", "off"]] = None
     # member prefs
     member_daily_digest: Optional[bool] = None
@@ -270,3 +275,13 @@ class DropUpdate(BaseModel):
     transcript_md: Optional[str] = None
     related_links: Optional[List[dict]] = None
     community_announcement: Optional[str] = None
+
+
+class UserEditIn(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    tier: Optional[Literal["none", "full", "foundational", "canceled"]] = None
+    role: Optional[Literal["member", "admin"]] = None
+    is_active: Optional[bool] = None
+    affiliate_earnings_cents: Optional[int] = None
+    confirm: Optional[bool] = None

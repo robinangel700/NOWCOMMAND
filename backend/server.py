@@ -1,6 +1,7 @@
 """NOWCOMMAND API server."""
 import os
 import uuid
+import json
 import logging
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -27,7 +28,7 @@ from models import (
     ChecklistItemIn, SettingsIn, MonthlySummaryIn, ReminderIn, CancelIn,
     WaitlistIn, ManifestoIn, ArticleIn, ArticleUpdate, LeadIn, ProfileIn,
     EmailTemplateUpdate, BrandIn, PricingIn, TestimonialIn, TestimonialModerate,
-    DropCommentIn, DMSendIn, NotifPrefsIn, DominionIn,
+    DropCommentIn, DMSendIn, NotifPrefsIn, DominionIn, UserEditIn,
 )
 from services import email_service, stripe_service, pdf_service, scheduler, welcome_book, ad_copy
 
@@ -40,8 +41,16 @@ log = logging.getLogger("nowcommand")
 async def lifespan(_app: FastAPI):
     from seed import seed_all
     await seed_all()
-    pdf_service.ensure_pdf()
+    pdf_service.ensure_pdf(force=True)
     welcome_book.ensure_pdf()
+    # Load admin email-template overrides into the in-memory cache so triggers use them.
+    try:
+        import email_templates as _et
+        _db = get_db()
+        items = [o async for o in _db.email_template_overrides.find({}, {"_id": 0})]
+        _et.load_overrides(items)
+    except Exception:
+        log.exception("Failed to load email overrides")
     scheduler.start()
     log.info("NOWCOMMAND started.")
     yield
@@ -76,6 +85,12 @@ async def _get_setting(key: str) -> Optional[dict]:
 async def _set_setting(key: str, value: dict):
     db = get_db()
     await db.settings.update_one({"key": key}, {"$set": {"value": value, "updated_at": now_iso()}}, upsert=True)
+
+
+async def require_active_membership(user: dict):
+    if user.get("tier") not in ("full", "foundational") and user.get("role") != "admin":
+        raise HTTPException(403, "Active membership required")
+    return user
 
 
 async def _active_member_count() -> int:
@@ -124,6 +139,173 @@ async def _promo_remaining_seconds() -> Optional[int]:
     end = launched_at + timedelta(days=int(launch.get("promo_days", 21)))
     remaining = (end - datetime.now(timezone.utc)).total_seconds()
     return max(int(remaining), 0)
+
+
+async def _resolve_stripe_event(request: Request, secret_env_var: str = "STRIPE_WEBHOOK_SECRET") -> dict:
+    payload = await request.body()
+    webhook_secret = os.environ.get(secret_env_var, "").strip()
+    if webhook_secret:
+        try:
+            return stripe_service.construct_event(payload, request.headers.get("stripe-signature", ""), webhook_secret)
+        except Exception:
+            raise HTTPException(400, "Invalid Stripe webhook signature.")
+    try:
+        return json.loads(payload.decode("utf-8") if payload else "{}")
+    except Exception:
+        raise HTTPException(400, "Malformed Stripe webhook payload.")
+
+
+def _stripe_plan_from_subscription(data: dict) -> Optional[str]:
+    try:
+        items = data.get("items", {}).get("data", [])
+        if not items:
+            return None
+        price = items[0].get("price", {})
+        metadata = price.get("metadata", {})
+        if metadata.get("plan"):
+            return metadata["plan"]
+        nickname = price.get("nickname", "") or ""
+        if "foundational" in nickname.lower():
+            return "foundational_monthly"
+        if "annual" in nickname.lower():
+            return "full_annual"
+        if "monthly" in nickname.lower():
+            return "full_monthly"
+    except Exception:
+        pass
+    return None
+
+
+async def _sync_subscription_state(user: dict, data: dict):
+    db = get_db()
+    updates = {}
+    status = data.get("status")
+    if status == "paused":
+        updates["paused"] = True
+    elif status in ("active", "trialing"):
+        updates["paused"] = False
+    plan = _stripe_plan_from_subscription(data)
+    if plan:
+        updates["stripe_plan"] = plan
+        if user.get("tier") == "canceled":
+            new_tier = "foundational" if plan == "foundational_monthly" else "full"
+            updates["tier"] = new_tier
+    if updates:
+        await db.users.update_one({"id": user["id"]}, {
+            "$set": updates,
+        })
+
+
+async def _finalize_payment_transaction(tx: dict, session: dict):
+    if tx.get("payment_status") == "paid":
+        return
+    if session.get("payment_status") != "paid":
+        return
+
+    db = get_db()
+    user = await db.users.find_one({"id": tx["user_id"]})
+    if not user:
+        return
+
+    update = {
+        "payment_status": "paid",
+        "status": session.get("status"),
+        "updated_at": now_iso(),
+        "finalized_at": now_iso(),
+    }
+
+    if tx["type"] == "subscription":
+        plan = tx.get("plan", "full_monthly")
+        new_tier = "foundational" if plan == "foundational_monthly" else "full"
+        sub_id = session.get("subscription") or f"sub_dev_{tx['session_id']}"
+        await db.users.update_one({"id": user["id"]}, {"$set": {
+            "tier": new_tier,
+            "stripe_subscription_id": sub_id,
+            "stripe_plan": plan,
+            "downloads_available": list(set((user.get("downloads_available") or []) + ["mammon_breaker"])),
+            "subscribed_at": now_iso(),
+            "paused": False,
+        }})
+        ref = tx.get("metadata", {}).get("ref")
+        amt = tx.get("amount_cents") or 0
+        if ref:
+            affiliate = await db.users.find_one({"affiliate_code": ref})
+            if affiliate and affiliate["id"] != user["id"]:
+                payout = int(amt * 0.5)
+                await db.users.update_one({"id": affiliate["id"]}, {"$inc": {"affiliate_earnings_cents": payout}})
+                await db.affiliate_referrals.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "affiliate_user_id": affiliate["id"],
+                    "referred_email": user["email"],
+                    "amount_cents": amt,
+                    "payout_cents": payout,
+                    "status": "credited",
+                    "created_at": now_iso(),
+                })
+        try:
+            import email_templates as _et
+            subj, html = _et.render("onboarding", {
+                "name": user.get("name", ""),
+                "frontend": os.environ.get("FRONTEND_BASE_URL", "").rstrip("/"),
+            })
+        except Exception:
+            subj = "Welcome to NOWCOMMAND"
+            html = email_service.wrap_html("Welcome", "<p>Open your dashboard.</p>")
+        await email_service.send_email(user["email"], subj, html, kind="onboarding")
+        try:
+            admin = await db.users.find_one({"role": "admin"})
+            if admin and (admin.get("notif_prefs") or {}).get("admin_on_purchase", True):
+                await email_service.send_email(
+                    admin["email"],
+                    f"💰 New {new_tier} member: {user['email']}",
+                    email_service.wrap_html(
+                        f"{user.get('name','')} just crossed the threshold",
+                        f"<p>Tier: <strong>{new_tier}</strong></p><p>Amount: ${(tx.get('amount_cents') or 0)/100:.2f}</p>",
+                        cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/admin?tab=members",
+                        cta_label="Open members",
+                    ),
+                    kind="admin_purchase",
+                )
+        except Exception:
+            pass
+    elif tx["type"] == "alacarte":
+        drop_id = tx.get("drop_id")
+        await db.alacarte_unlocks.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "drop_id": drop_id,
+            "amount_cents": tx.get("amount_cents"),
+            "created_at": now_iso(),
+        })
+        # Credit affiliate for a-la-carte purchases too (50% of the one-time amount)
+        ref = tx.get("metadata", {}).get("ref")
+        amt = tx.get("amount_cents") or 0
+        if ref:
+            affiliate = await db.users.find_one({"affiliate_code": ref})
+            if affiliate and affiliate["id"] != user["id"]:
+                payout = int(amt * 0.5)
+                await db.users.update_one({"id": affiliate["id"]}, {"$inc": {"affiliate_earnings_cents": payout}})
+                await db.affiliate_referrals.insert_one({
+                    "id": str(uuid.uuid4()),
+                    "affiliate_user_id": affiliate["id"],
+                    "referred_email": user["email"],
+                    "amount_cents": amt,
+                    "payout_cents": payout,
+                    "status": "credited",
+                    "created_at": now_iso(),
+                })
+        try:
+            import email_templates as _et
+            d = await db.drops.find_one({"id": drop_id}, {"_id": 0})
+            subj, html = _et.render("alacarte_purchased", {
+                "title": (d or {}).get("title", "Your asset"),
+                "frontend": os.environ.get("FRONTEND_BASE_URL", "").rstrip("/"),
+            })
+            await email_service.send_email(user["email"], subj, html, kind="alacarte_purchased")
+        except Exception:
+            pass
+
+    await db.payment_transactions.update_one({"session_id": tx["session_id"]}, {"$set": update})
 
 
 # ============================================================
@@ -187,12 +369,18 @@ async def join_waitlist(body: WaitlistIn):
 # ============================================================
 
 @api.post("/auth/signup")
-async def signup(body: SignupIn):
+async def signup(body: SignupIn, response: Response):
     db = get_db()
     email = body.email.lower()
     existing = await db.users.find_one({"email": email})
     if existing:
         raise HTTPException(409, "An account with that email already exists.")
+    ref_code = body.ref.strip().upper() if body.ref else None
+    # Validate the ref code exists
+    if ref_code:
+        ref_user = await db.users.find_one({"affiliate_code": ref_code})
+        if not ref_user:
+            ref_code = None  # silently ignore invalid ref codes
     user = {
         "id": str(uuid.uuid4()),
         "email": email,
@@ -207,6 +395,11 @@ async def signup(body: SignupIn):
         "created_at": now_iso(),
         "affiliate_code": uuid.uuid4().hex[:8].upper(),
         "affiliate_earnings_cents": 0,
+        "referred_by": ref_code,  # affiliate code that referred this user
+        "stripe_connect_account_id": None,
+        "stripe_connect_onboarding_complete": False,
+        "stripe_connect_payouts_enabled": False,
+        "stripe_connect_charges_enabled": False,
         "is_active": True,
         "downloads_available": [],
     }
@@ -230,11 +423,21 @@ async def signup(body: SignupIn):
     except Exception:
         log.exception("admin signup notify failed")
     token = create_token(user["id"], "member")
+    # Set httpOnly cookie for browser-based auth (frontend will rely on cookie)
+    front_is_https = os.environ.get("FRONTEND_BASE_URL", "").startswith("https")
+    response.set_cookie(
+        key="nowcommand_token",
+        value=token,
+        httponly=True,
+        secure=front_is_https,
+        samesite="lax",
+        max_age=30 * 24 * 3600,
+    )
     return {"token": token, "user": _public_user(user)}
 
 
 @api.post("/auth/login")
-async def login(body: LoginIn):
+async def login(body: LoginIn, response: Response):
     db = get_db()
     email = body.email.lower()
     user = await db.users.find_one({"email": email})
@@ -242,7 +445,23 @@ async def login(body: LoginIn):
         raise HTTPException(401, "Invalid email or password")
     token = create_token(user["id"], user.get("role", "member"))
     await db.users.update_one({"id": user["id"]}, {"$set": {"last_login": now_iso()}})
+    front_is_https = os.environ.get("FRONTEND_BASE_URL", "").startswith("https")
+    response.set_cookie(
+        key="nowcommand_token",
+        value=token,
+        httponly=True,
+        secure=front_is_https,
+        samesite="lax",
+        max_age=30 * 24 * 3600,
+    )
     return {"token": token, "user": _public_user(user)}
+
+
+@api.post("/auth/logout")
+async def logout(response: Response):
+    # Clear auth cookie
+    response.delete_cookie("nowcommand_token")
+    return {"ok": True}
 
 
 @api.get("/auth/me")
@@ -277,18 +496,27 @@ async def checkout_subscription(body: CheckoutIn, user: dict = Depends(get_curre
         "email": user["email"],
         "plan": body.plan,
     }
+    # Pass referral code into metadata if provided
+    if body.ref:
+        metadata["ref"] = body.ref.strip().upper()
+    elif user.get("referred_by"):
+        metadata["ref"] = user["referred_by"]
     origin = body.origin_url.rstrip("/")
     success_url = f"{origin}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{origin}/pricing?canceled=1"
 
-    result = stripe_service.create_subscription_checkout(
-        customer_id=cust_id,
-        plan=body.plan,
-        success_url=success_url,
-        cancel_url=cancel_url,
-        pricing=pricing,
-        metadata=metadata,
-    )
+    try:
+        result = stripe_service.create_subscription_checkout(
+            customer_id=cust_id,
+            plan=body.plan,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            pricing=pricing,
+            metadata=metadata,
+        )
+    except Exception as e:
+        log.exception("Stripe checkout failed")
+        raise HTTPException(500, "Stripe checkout is unavailable. Ensure STRIPE_API_KEY is set to a real Stripe secret key.")
 
     await db.payment_transactions.insert_one({
         "id": str(uuid.uuid4()),
@@ -325,14 +553,18 @@ async def checkout_alacarte(body: AlacarteCheckoutIn, user: dict = Depends(get_c
     success_url = f"{origin}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{origin}/dashboard?canceled=1"
 
-    result = stripe_service.create_alacarte_checkout(
-        customer_id=cust_id,
-        amount_cents=int(drop["alacarte_price_cents"]),
-        description=f"NOWCOMMAND: {drop['title']}",
-        success_url=success_url,
-        cancel_url=cancel_url,
-        metadata=metadata,
-    )
+    try:
+        result = stripe_service.create_alacarte_checkout(
+            customer_id=cust_id,
+            amount_cents=int(drop["alacarte_price_cents"]),
+            description=f"NOWCOMMAND: {drop['title']}",
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata=metadata,
+        )
+    except Exception as e:
+        log.exception("Stripe checkout failed")
+        raise HTTPException(500, "Stripe checkout is unavailable. Ensure STRIPE_API_KEY is set to a real Stripe secret key.")
 
     await db.payment_transactions.insert_one({
         "id": str(uuid.uuid4()),
@@ -364,91 +596,7 @@ async def checkout_status(session_id: str, user: dict = Depends(get_current_user
         return tx
 
     s = stripe_service.retrieve_session(session_id)
-    payment_status = s.get("payment_status")
-    status = s.get("status")
-    update = {"payment_status": payment_status, "status": status, "updated_at": now_iso()}
-
-    if payment_status == "paid":
-        # Finalize: activate user / record alacarte / etc.
-        if tx["type"] == "subscription":
-            plan = tx.get("plan", "full_monthly")
-            new_tier = "foundational" if plan == "foundational_monthly" else "full"
-            sub_id = s.get("subscription") or f"sub_dev_{session_id}"
-            await db.users.update_one({"id": user["id"]}, {"$set": {
-                "tier": new_tier,
-                "stripe_subscription_id": sub_id,
-                "stripe_plan": plan,
-                "downloads_available": list(set((user.get("downloads_available") or []) + ["mammon_breaker"])),
-                "subscribed_at": now_iso(),
-                "paused": False,
-            }})
-            # Affiliate credit if any
-            ref = tx.get("metadata", {}).get("ref")
-            amt = tx.get("amount_cents") or 0
-            if ref:
-                affiliate = await db.users.find_one({"affiliate_code": ref})
-                if affiliate and affiliate["id"] != user["id"]:
-                    payout = int(amt * 0.5)
-                    await db.users.update_one({"id": affiliate["id"]}, {"$inc": {"affiliate_earnings_cents": payout}})
-                    await db.affiliate_referrals.insert_one({
-                        "id": str(uuid.uuid4()),
-                        "affiliate_user_id": affiliate["id"],
-                        "referred_email": user["email"],
-                        "amount_cents": amt,
-                        "payout_cents": payout,
-                        "status": "credited",
-                        "created_at": now_iso(),
-                    })
-            # Send onboarding + instant download link
-            try:
-                import email_templates as _et
-                subj, html = _et.render("onboarding", {
-                    "name": user.get("name", ""),
-                    "frontend": os.environ.get("FRONTEND_BASE_URL", "").rstrip("/"),
-                })
-            except Exception:
-                subj = "Welcome to NOWCOMMAND"
-                html = email_service.wrap_html("Welcome", "<p>Open your dashboard.</p>")
-            await email_service.send_email(user["email"], subj, html, kind="onboarding")
-            # Admin notification of purchase
-            try:
-                admin = await db.users.find_one({"role": "admin"})
-                if admin and (admin.get("notif_prefs") or {}).get("admin_on_purchase", True):
-                    await email_service.send_email(
-                        admin["email"],
-                        f"💰 New {new_tier} member: {user['email']}",
-                        email_service.wrap_html(
-                            f"{user.get('name','')} just crossed the threshold",
-                            f"<p>Tier: <strong>{new_tier}</strong></p><p>Amount: ${(tx.get('amount_cents') or 0)/100:.2f}</p>",
-                            cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/admin?tab=members",
-                            cta_label="Open members",
-                        ),
-                        kind="admin_purchase",
-                    )
-            except Exception:
-                pass
-        elif tx["type"] == "alacarte":
-            drop_id = tx.get("drop_id")
-            await db.alacarte_unlocks.insert_one({
-                "id": str(uuid.uuid4()),
-                "user_id": user["id"],
-                "drop_id": drop_id,
-                "amount_cents": tx.get("amount_cents"),
-                "created_at": now_iso(),
-            })
-            try:
-                import email_templates as _et
-                d = await db.drops.find_one({"id": drop_id}, {"_id": 0})
-                subj, html = _et.render("alacarte_purchased", {
-                    "title": (d or {}).get("title", "Your asset"),
-                    "frontend": os.environ.get("FRONTEND_BASE_URL", "").rstrip("/"),
-                })
-                await email_service.send_email(user["email"], subj, html, kind="alacarte_purchased")
-            except Exception:
-                pass
-        update["finalized_at"] = now_iso()
-
-    await db.payment_transactions.update_one({"session_id": session_id}, {"$set": update})
+    await _finalize_payment_transaction(tx, s)
     tx2 = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
     return tx2
 
@@ -537,14 +685,8 @@ async def billing_resume(user: dict = Depends(get_current_user)):
 
 @api.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
-    payload = await request.body()
+    evt = await _resolve_stripe_event(request, "STRIPE_WEBHOOK_SECRET")
     db = get_db()
-    # In real mode, you'd validate signature. We log and act on event types.
-    try:
-        import json
-        evt = json.loads(payload.decode("utf-8")) if payload else {}
-    except Exception:
-        evt = {}
     etype = evt.get("type", "")
     data = (evt.get("data") or {}).get("object") or {}
     cust_id = data.get("customer") or data.get("customer_id")
@@ -552,8 +694,14 @@ async def stripe_webhook(request: Request):
     if cust_id:
         user = await db.users.find_one({"stripe_customer_id": cust_id})
 
-    if etype == "invoice.payment_failed" and user:
-        # Stripe handles smart retries automatically; we just notify member.
+    admin = await db.users.find_one({"role": "admin"})
+    if etype == "checkout.session.completed":
+        session_id = data.get("id")
+        if session_id:
+            tx = await db.payment_transactions.find_one({"session_id": session_id})
+            if tx:
+                await _finalize_payment_transaction(tx, data)
+    elif etype == "invoice.payment_failed" and user:
         await email_service.send_email(
             user["email"],
             "Payment hiccup — NOWCOMMAND auto-retry scheduled",
@@ -566,21 +714,112 @@ async def stripe_webhook(request: Request):
             ),
             kind="payment_failed",
         )
+        if admin and (admin.get("notif_prefs") or {}).get("admin_on_payment_failed", True):
+            await email_service.send_email(
+                admin["email"],
+                f"Payment failed — {user['email']}",
+                email_service.wrap_html(
+                    "Stripe payment failed",
+                    f"<p>{user['email']} had a payment failure on their NOWCOMMAND subscription.</p>",
+                    cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/admin?tab=members",
+                    cta_label="View members",
+                ),
+                kind="admin_payment_failed",
+            )
+    elif etype == "invoice.payment_succeeded" and user:
+        try:
+            import email_templates as _et
+            subj, html = _et.render("payment_succeeded", {
+                "frontend": os.environ.get("FRONTEND_BASE_URL", "").rstrip("/"),
+            })
+            await email_service.send_email(user["email"], subj, html, kind="payment_succeeded")
+        except Exception:
+            pass
+        if admin and (admin.get("notif_prefs") or {}).get("admin_on_payment_succeeded", False):
+            await email_service.send_email(
+                admin["email"],
+                f"Renewal succeeded — {user['email']}",
+                email_service.wrap_html(
+                    "Stripe payment succeeded",
+                    f"<p>{user['email']} successfully renewed their NOWCOMMAND subscription.</p>",
+                    cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/admin?tab=members",
+                    cta_label="View members",
+                ),
+                kind="admin_payment_succeeded",
+            )
     elif etype == "invoice.upcoming" and user:
-        # Pre-card expiration / pre-billing reminder
         await email_service.send_email(
             user["email"],
             "NOWCOMMAND renewal preview",
             email_service.wrap_html(
                 "Renewal preview",
-                "<p>Your NOWCOMMAND membership will renew shortly. If your card has changed, one click updates it.</p>",
+                "<p>Your NOWCOMMAND membership will renew shortly. If your card has changed, one click updates it.</p>"
+                "<p>If your card is current, no action is needed.</p>",
                 cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/billing",
                 cta_label="Manage Billing",
             ),
             kind="invoice_upcoming",
         )
+    elif etype == "customer.subscription.updated" and user:
+        await _sync_subscription_state(user, data)
+    elif etype == "customer.subscription.paused" and user:
+        await _sync_subscription_state(user, data)
+        try:
+            import email_templates as _et
+            subj, html = _et.render("subscription_paused", {
+                "frontend": os.environ.get("FRONTEND_BASE_URL", "").rstrip("/"),
+            })
+            await email_service.send_email(user["email"], subj, html, kind="subscription_paused")
+        except Exception:
+            pass
+        if admin and (admin.get("notif_prefs") or {}).get("admin_on_subscription_paused", True):
+            await email_service.send_email(
+                admin["email"],
+                f"Subscription paused — {user['email']}",
+                email_service.wrap_html(
+                    "A member paused their subscription.",
+                    f"<p>{user['email']} has paused their NOWCOMMAND subscription.</p>",
+                    cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/admin?tab=members",
+                    cta_label="View members",
+                ),
+                kind="admin_subscription_paused",
+            )
+    elif etype == "customer.subscription.resumed" and user:
+        await _sync_subscription_state(user, data)
+        try:
+            import email_templates as _et
+            subj, html = _et.render("subscription_resumed", {
+                "frontend": os.environ.get("FRONTEND_BASE_URL", "").rstrip("/"),
+            })
+            await email_service.send_email(user["email"], subj, html, kind="subscription_resumed")
+        except Exception:
+            pass
+        if admin and (admin.get("notif_prefs") or {}).get("admin_on_subscription_resumed", True):
+            await email_service.send_email(
+                admin["email"],
+                f"Subscription resumed — {user['email']}",
+                email_service.wrap_html(
+                    "A member resumed their subscription.",
+                    f"<p>{user['email']} has resumed their NOWCOMMAND subscription.</p>",
+                    cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/admin?tab=members",
+                    cta_label="View members",
+                ),
+                kind="admin_subscription_resumed",
+            )
     elif etype == "customer.subscription.deleted" and user:
         await db.users.update_one({"id": user["id"]}, {"$set": {"tier": "canceled"}})
+        if admin and (admin.get("notif_prefs") or {}).get("admin_on_cancel", True):
+            await email_service.send_email(
+                admin["email"],
+                f"Subscription deleted — {user['email']}",
+                email_service.wrap_html(
+                    "A subscription was deleted.",
+                    f"<p>{user['email']}'s subscription was deleted in Stripe.</p>",
+                    cta_url=f"{os.environ.get('FRONTEND_BASE_URL','')}/admin?tab=members",
+                    cta_label="View members",
+                ),
+                kind="admin_cancel",
+            )
     return {"received": True}
 
 
@@ -602,6 +841,7 @@ def _drop_visible_to(d: dict, user: dict) -> bool:
 
 @api.get("/drops")
 async def list_drops(user: dict = Depends(get_current_user)):
+    await require_active_membership(user)
     db = get_db()
     out = []
     async for d in db.drops.find().sort("scheduled_for", -1):
@@ -646,6 +886,7 @@ async def list_drops(user: dict = Depends(get_current_user)):
 
 @api.get("/drops/{drop_id}")
 async def get_drop(drop_id: str, user: dict = Depends(get_current_user)):
+    await require_active_membership(user)
     db = get_db()
     d = await db.drops.find_one({"id": drop_id}, {"_id": 0})
     if not d:
@@ -666,6 +907,7 @@ async def get_drop(drop_id: str, user: dict = Depends(get_current_user)):
 
 @api.post("/notes")
 async def save_note(body: NoteIn, user: dict = Depends(get_current_user)):
+    await require_active_membership(user)
     db = get_db()
     existing = await db.notes.find_one({"user_id": user["id"], "drop_id": body.drop_id})
     if existing:
@@ -681,6 +923,7 @@ async def save_note(body: NoteIn, user: dict = Depends(get_current_user)):
 
 @api.get("/notes")
 async def list_notes(user: dict = Depends(get_current_user)):
+    await require_active_membership(user)
     db = get_db()
     notes = await db.notes.find({"user_id": user["id"]}, {"_id": 0}).sort("updated_at", -1).to_list(500)
     return {"notes": notes}
@@ -688,6 +931,7 @@ async def list_notes(user: dict = Depends(get_current_user)):
 
 @api.post("/bookmarks/{drop_id}")
 async def toggle_bookmark(drop_id: str, user: dict = Depends(get_current_user)):
+    await require_active_membership(user)
     db = get_db()
     existing = await db.bookmarks.find_one({"user_id": user["id"], "drop_id": drop_id})
     if existing:
@@ -699,6 +943,7 @@ async def toggle_bookmark(drop_id: str, user: dict = Depends(get_current_user)):
 
 @api.get("/bookmarks")
 async def list_bookmarks(user: dict = Depends(get_current_user)):
+    await require_active_membership(user)
     db = get_db()
     bms = await db.bookmarks.find({"user_id": user["id"]}, {"_id": 0}).to_list(500)
     return {"bookmarks": bms}
@@ -706,6 +951,7 @@ async def list_bookmarks(user: dict = Depends(get_current_user)):
 
 @api.get("/progress")
 async def get_progress(user: dict = Depends(get_current_user)):
+    await require_active_membership(user)
     db = get_db()
     total_drops = await db.drops.count_documents({"published": True})
     notes_count = await db.notes.count_documents({"user_id": user["id"]})
@@ -921,6 +1167,168 @@ async def affiliate_me(user: dict = Depends(get_current_user)):
         "earnings_cents": user.get("affiliate_earnings_cents", 0),
         "referrals": refs,
     }
+
+
+@api.post("/affiliate/connect")
+async def affiliate_connect(user: dict = Depends(get_current_user)):
+    """Create or retrieve a Stripe Connect Express account for this affiliate.
+
+    Returns an onboarding URL the affiliate must visit to complete KYC.
+    """
+    db = get_db()
+    existing_id = user.get("stripe_connect_account_id")
+    if existing_id:
+        # Already has an account — return its status
+        status = stripe_service.retrieve_connect_account(existing_id)
+        return {
+            "account_id": existing_id,
+            "onboarding_complete": status.get("details_submitted", False),
+            "payouts_enabled": status.get("payouts_enabled", False),
+            "charges_enabled": status.get("charges_enabled", False),
+            "onboarding_url": None,
+            "dev_mode": status.get("dev_mode", False),
+        }
+    try:
+        result = stripe_service.create_connect_account(user["email"], user["id"])
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    # Store the account id on the user
+    await db.users.update_one({"id": user["id"]}, {"$set": {
+        "stripe_connect_account_id": result["account_id"],
+    }})
+    return {
+        "account_id": result["account_id"],
+        "onboarding_url": result.get("onboarding_url"),
+        "onboarding_complete": False,
+        "payouts_enabled": False,
+        "charges_enabled": False,
+        "dev_mode": result.get("dev_mode", False),
+    }
+
+
+@api.get("/affiliate/connect-status")
+async def affiliate_connect_status(user: dict = Depends(get_current_user)):
+    """Check the current status of the affiliate's Connect account."""
+    account_id = user.get("stripe_connect_account_id")
+    if not account_id:
+        return {"connected": False, "onboarding_complete": False, "payouts_enabled": False}
+    status = stripe_service.retrieve_connect_account(account_id)
+    return {
+        "connected": True,
+        "account_id": account_id,
+        "onboarding_complete": status.get("details_submitted", False),
+        "payouts_enabled": status.get("payouts_enabled", False),
+        "charges_enabled": status.get("charges_enabled", False),
+        "requirements": status.get("requirements", {}),
+        "dev_mode": status.get("dev_mode", False),
+    }
+
+
+@api.post("/affiliate/request-payout")
+async def affiliate_request_payout(user: dict = Depends(get_current_user)):
+    """Request a payout of the affiliate's current earnings to their Stripe Connect account.
+
+    Transfers the full affiliate_earnings_cents balance to the connected account.
+    """
+    db = get_db()
+    account_id = user.get("stripe_connect_account_id")
+    if not account_id:
+        raise HTTPException(400, "No Stripe Connect account. Set up payout account first.")
+    # Verify the account is fully onboarded
+    status = stripe_service.retrieve_connect_account(account_id)
+    if not status.get("details_submitted"):
+        raise HTTPException(400, "Payout account onboarding not complete.")
+    if not status.get("payouts_enabled"):
+        raise HTTPException(400, "Payouts not enabled on your account yet.")
+
+    earnings = user.get("affiliate_earnings_cents", 0)
+    if earnings < 1000:
+        raise HTTPException(400, "Minimum payout is $10.00 (1000 cents).")
+
+    try:
+        transfer = stripe_service.create_connect_transfer(
+            amount_cents=earnings,
+            destination_account_id=account_id,
+            metadata={
+                "user_id": user["id"],
+                "email": user["email"],
+                "type": "affiliate_payout",
+            },
+        )
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+
+    # Record the payout
+    payout_id = str(uuid.uuid4())
+    await db.affiliate_payouts.insert_one({
+        "id": payout_id,
+        "user_id": user["id"],
+        "user_email": user["email"],
+        "amount_cents": earnings,
+        "stripe_transfer_id": transfer["id"],
+        "status": transfer.get("status", "pending"),
+        "created_at": now_iso(),
+    })
+    # Reset earnings to 0 (they've been transferred out)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"affiliate_earnings_cents": 0}})
+
+    return {
+        "payout_id": payout_id,
+        "amount_cents": earnings,
+        "stripe_transfer_id": transfer["id"],
+        "status": transfer.get("status", "pending"),
+        "dev_mode": transfer.get("dev_mode", False),
+    }
+
+
+@api.get("/affiliate/payouts")
+async def affiliate_payouts(user: dict = Depends(get_current_user)):
+    """List all payouts made to this affiliate."""
+    db = get_db()
+    rows = await db.affiliate_payouts.find(
+        {"user_id": user["id"]},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(100)
+    return {"payouts": rows}
+
+
+# ============================================================
+#  STRIPE CONNECT WEBHOOK
+# ============================================================
+
+@api.post("/webhook/stripe/connect")
+async def stripe_connect_webhook(request: Request):
+    """Handle Stripe Connect account.updated events.
+
+    When an affiliate completes (or fails) onboarding, Stripe sends this.
+    We update the user's record accordingly.
+    """
+    evt = await _resolve_stripe_event(request, "STRIPE_CONNECT_WEBHOOK_SECRET")
+    etype = evt.get("type", "")
+    data = (evt.get("data") or {}).get("object") or {}
+    account_id = data.get("id")
+    if not account_id:
+        return {"received": True}
+
+    db = get_db()
+    user = await db.users.find_one({"stripe_connect_account_id": account_id})
+    if not user:
+        log.warning(f"Connect webhook for unknown account: {account_id}")
+        return {"received": True}
+
+    if etype == "account.updated":
+        details_submitted = data.get("details_submitted", False)
+        payouts_enabled = data.get("payouts_enabled", False)
+        charges_enabled = data.get("charges_enabled", False)
+        await db.users.update_one({"id": user["id"]}, {"$set": {
+            "stripe_connect_onboarding_complete": details_submitted,
+            "stripe_connect_payouts_enabled": payouts_enabled,
+            "stripe_connect_charges_enabled": charges_enabled,
+            "stripe_connect_updated_at": now_iso(),
+        }})
+        log.info(f"Connect account {account_id} updated: details_submitted={details_submitted}, payouts_enabled={payouts_enabled}")
+
+    return {"received": True}
 
 
 # ============================================================
@@ -1251,6 +1659,102 @@ async def admin_waitlist(user: dict = Depends(get_current_user)):
     return {"waitlist": rows, "count": len(rows)}
 
 
+@api.get("/admin/affiliates")
+async def admin_affiliates(user: dict = Depends(get_current_user)):
+    """List all affiliates with their earnings and Connect status."""
+    await require_admin(user)
+    db = get_db()
+    affiliates = []
+    async for u in db.users.find(
+        {"affiliate_earnings_cents": {"$gt": 0}},
+        {"_id": 0, "password_hash": 0},
+    ).sort("affiliate_earnings_cents", -1):
+        ref_count = await db.affiliate_referrals.count_documents({"affiliate_user_id": u["id"]})
+        affiliates.append({
+            "id": u["id"],
+            "email": u["email"],
+            "name": u.get("name", ""),
+            "affiliate_code": u.get("affiliate_code"),
+            "earnings_cents": u.get("affiliate_earnings_cents", 0),
+            "referrals_count": ref_count,
+            "connect_account_id": u.get("stripe_connect_account_id"),
+            "connect_onboarding_complete": u.get("stripe_connect_onboarding_complete", False),
+            "connect_payouts_enabled": u.get("stripe_connect_payouts_enabled", False),
+        })
+    return {"affiliates": affiliates}
+
+
+@api.post("/admin/affiliate/payouts")
+async def admin_affiliate_payouts(user: dict = Depends(get_current_user)):
+    """Admin triggers payouts for all affiliates with Connect accounts and sufficient balance.
+
+    Transfers each affiliate's earnings to their connected Stripe account.
+    Returns a list of results.
+    """
+    await require_admin(user)
+    db = get_db()
+    results = []
+    async for u in db.users.find(
+        {
+            "affiliate_earnings_cents": {"$gte": 1000},
+            "stripe_connect_account_id": {"$ne": None},
+            "stripe_connect_onboarding_complete": True,
+            "stripe_connect_payouts_enabled": True,
+        },
+        {"_id": 0},
+    ):
+        account_id = u["stripe_connect_account_id"]
+        earnings = u["affiliate_earnings_cents"]
+        try:
+            transfer = stripe_service.create_connect_transfer(
+                amount_cents=earnings,
+                destination_account_id=account_id,
+                metadata={
+                    "user_id": u["id"],
+                    "email": u["email"],
+                    "type": "admin_batch_affiliate_payout",
+                },
+            )
+            payout_id = str(uuid.uuid4())
+            await db.affiliate_payouts.insert_one({
+                "id": payout_id,
+                "user_id": u["id"],
+                "user_email": u["email"],
+                "amount_cents": earnings,
+                "stripe_transfer_id": transfer["id"],
+                "status": transfer.get("status", "pending"),
+                "created_at": now_iso(),
+                "triggered_by": "admin",
+            })
+            await db.users.update_one({"id": u["id"]}, {"$set": {"affiliate_earnings_cents": 0}})
+            results.append({
+                "user_id": u["id"],
+                "email": u["email"],
+                "amount_cents": earnings,
+                "status": "paid",
+                "transfer_id": transfer["id"],
+            })
+        except Exception as e:
+            log.exception(f"Payout failed for {u['email']}")
+            results.append({
+                "user_id": u["id"],
+                "email": u["email"],
+                "amount_cents": earnings,
+                "status": "failed",
+                "error": str(e),
+            })
+    return {"results": results, "count": len(results)}
+
+
+@api.get("/admin/affiliate/payouts")
+async def admin_list_affiliate_payouts(user: dict = Depends(get_current_user)):
+    """List all affiliate payouts."""
+    await require_admin(user)
+    db = get_db()
+    rows = await db.affiliate_payouts.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return {"payouts": rows}
+
+
 # ============================================================
 #  ARTICLES / BLOG  (free + vault)
 # ============================================================
@@ -1512,6 +2016,8 @@ async def admin_email_template_update(key: str, body: EmailTemplateUpdate, user:
             upsert=True,
         )
     o = await db.email_template_overrides.find_one({"key": key}, {"_id": 0})
+    import email_templates as et
+    et.set_override(key, o)
     return {"override": o}
 
 
@@ -1529,7 +2035,34 @@ async def admin_send_test_email(key: str, user: dict = Depends(get_current_user)
            "amount": "$22.00", "referred": "a new sovereign"}
     subj, html = et.render(key, ctx)
     rec = await email_service.send_email(user["email"], "[TEST] " + subj, html, kind=f"test_{key}")
-    return {"status": rec.get("status"), "id": rec.get("id")}
+    return {"status": rec.get("status"), "id": rec.get("id"), "error": rec.get("error")}
+
+
+# ---- Email sender settings (From address / reply-to) ----
+@api.get("/admin/email-settings")
+async def admin_get_email_settings(user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    cfg = await email_service._email_config()
+    saved = await _get_setting("email_settings") or {}
+    return {
+        "from_name": saved.get("from_name", "NOWCOMMAND"),
+        "from_email": saved.get("from_email", ""),
+        "reply_to": saved.get("reply_to", ""),
+        "resolved_from": cfg["from_full"],
+        "using_dev_domain": cfg["using_dev_domain"],
+        "resend_connected": bool((os.environ.get("RESEND_API_KEY") or "").strip()),
+    }
+
+
+@api.post("/admin/email-settings")
+async def admin_set_email_settings(payload: dict, user: dict = Depends(get_current_user)):
+    await require_admin(user)
+    allowed = {k: v for k, v in (payload or {}).items() if k in ("from_name", "from_email", "reply_to")}
+    current = await _get_setting("email_settings") or {}
+    current.update(allowed)
+    await _set_setting("email_settings", current)
+    cfg = await email_service._email_config()
+    return {"saved": current, "resolved_from": cfg["from_full"], "using_dev_domain": cfg["using_dev_domain"]}
 
 
 # ============================================================
@@ -1716,7 +2249,8 @@ async def public_testimonials():
     # Hide entire page until admin enables it (auto-enables once first testimonial is featured/approved)
     setting = await _get_setting("testimonials_published")
     rows = await db.testimonials.find({"status": {"$in": ["approved", "featured"]}}, {"_id": 0}).sort([("status", -1), ("created_at", -1)]).limit(50).to_list(50)
-    published = bool(setting) if setting is not None else (len(rows) > 0)
+    # Page stays UNPUBLISHED until the admin explicitly turns it on in the admin panel.
+    published = bool(setting)
     return {"testimonials": rows if published else [], "published": published}
 
 
@@ -1728,14 +2262,47 @@ async def admin_testimonials_publish(payload: dict, user: dict = Depends(get_cur
 
 
 @api.patch("/admin/members/{member_id}")
-async def admin_edit_member(member_id: str, payload: dict, user: dict = Depends(get_current_user)):
+async def admin_edit_member(member_id: str, body: UserEditIn, user: dict = Depends(get_current_user)):
     await require_admin(user)
     db = get_db()
-    allowed = {"name", "bio", "tier", "avatar_url", "cover_image_url", "is_active"}
-    update = {k: v for k, v in (payload or {}).items() if k in allowed}
+    target = await db.users.find_one({"id": member_id})
+    if not target:
+        raise HTTPException(404, "Member not found")
+    if target.get("role") == "admin":
+        raise HTTPException(403, "Cannot edit admin account")
+    update = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    confirm = update.pop("confirm", None)
+    if not confirm:
+        return {"status": "confirm_required", "message": "This will update the member's account. Pass confirm=true to proceed.", "fields": list(update.keys())}
     if update:
         await db.users.update_one({"id": member_id}, {"$set": update})
     return {"status": "ok"}
+
+
+@api.delete("/admin/members/{member_id}")
+async def admin_delete_member(member_id: str, user: dict = Depends(get_current_user), confirm: bool = False):
+    await require_admin(user)
+    db = get_db()
+    target = await db.users.find_one({"id": member_id})
+    if not target:
+        raise HTTPException(404, "Member not found")
+    if target.get("role") == "admin":
+        raise HTTPException(403, "Cannot delete admin account")
+    if not confirm:
+        return {"status": "confirm_required", "message": f"This will permanently delete {target.get('name', target['email'])} and all their data. Pass ?confirm=true to proceed."}
+    # Clean up related data
+    await db.notes.delete_many({"user_id": member_id})
+    await db.bookmarks.delete_many({"user_id": member_id})
+    await db.quiz_attempts.delete_many({"user_id": member_id})
+    await db.learning_progress.delete_many({"user_id": member_id})
+    await db.posts.delete_many({"user_id": member_id})
+    await db.comments.delete_many({"user_id": member_id})
+    await db.alacarte_unlocks.delete_many({"user_id": member_id})
+    await db.payment_transactions.delete_many({"user_id": member_id})
+    await db.affiliate_referrals.delete_many({"affiliate_user_id": member_id})
+    await db.affiliate_payouts.delete_many({"user_id": member_id})
+    await db.users.delete_one({"id": member_id})
+    return {"status": "deleted"}
 
 
 @api.patch("/admin/members/{member_id}/note")
@@ -1960,6 +2527,9 @@ DEFAULT_PREFS = {
     "admin_on_testimonial": True,
     "admin_on_lead": False,
     "admin_on_payment_failed": True,
+    "admin_on_payment_succeeded": True,
+    "admin_on_subscription_paused": True,
+    "admin_on_subscription_resumed": True,
     "admin_digest_frequency": "daily",
     "member_daily_digest": True,
     "member_drop_announcement": True,
@@ -2072,8 +2642,8 @@ async def upload_file(payload: dict, user: dict = Depends(get_current_user)):
 
 DEFAULT_DOMINION = {
     "book_url": "",
-    "book_status": "available",  # the generated PDF ships available by default
-    "book_note": "Dominion Over Mammon & The Spirit of Delay — your welcome volume.",
+    "book_status": "forthcoming",
+    "book_note": "Dominion Over Mammon & The Spirit of Delay — the full volume is being finalized. The Field Notes edition is already bundled inside your Activation Codes PDF.",
     "audiobook_url": "",
     "audiobook_status": "forthcoming",
     "audiobook_note": "The narrated edition is being recorded. It unlocks here automatically the moment it lands.",
@@ -2087,17 +2657,16 @@ async def _dominion_settings() -> dict:
 
 @api.get("/dominion")
 async def member_dominion(user: dict = Depends(get_current_user)):
-    """Member-facing library state. Books show 'available' (download) or 'forthcoming'."""
+    """Member-facing library state. Both book & audiobook stay 'forthcoming' until admin uploads."""
     if user.get("tier") not in ("full", "foundational") and user.get("role") != "admin":
         raise HTTPException(403, "Active membership required")
     s = await _dominion_settings()
-    # The book always has a generated PDF fallback, so it's downloadable.
-    book_available = s["book_status"] == "available"
+    book_available = s["book_status"] == "available" and bool(s["book_url"])
     audio_available = s["audiobook_status"] == "available" and bool(s["audiobook_url"])
     return {
         "book": {
             "status": "available" if book_available else "forthcoming",
-            "url": s["book_url"] or "",  # empty => use /downloads/welcome_book
+            "url": s["book_url"] if book_available else "",
             "note": s["book_note"],
         },
         "audiobook": {
@@ -2136,6 +2705,7 @@ async def admin_set_dominion(body: DominionIn, user: dict = Depends(get_current_
 @api.get("/me/badges")
 async def my_badges(user: dict = Depends(get_current_user)):
     """Compute achievement badges from the member's real activity. No new schema."""
+    await require_active_membership(user)
     db = get_db()
     uid = user["id"]
     notes = await db.notes.count_documents({"user_id": uid})
@@ -2435,10 +3005,16 @@ We do not use third-party advertising or tracking cookies. Stripe sets its own s
 # ---------- mount and CORS ----------
 app.include_router(api)
 
+_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
+# If wildcard is set but FRONTEND_BASE_URL is provided, prefer explicit frontend origin
+frontend_origin = os.environ.get("FRONTEND_BASE_URL")
+if "*" in _origins and frontend_origin:
+    _origins = [frontend_origin.rstrip("/")]
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_origins=_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

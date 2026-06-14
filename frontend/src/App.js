@@ -46,7 +46,7 @@ function BrandLoader() {
       if (b.surface_hex) root.style.setProperty("--brand-surface", b.surface_hex);
       if (b.border_hex) root.style.setProperty("--brand-border", b.border_hex);
       if (b.site_name) document.title = b.site_name;
-    }).catch(() => {});
+    }).catch((e) => { console.error("Brand load failed", e); });
   }, []);
   return null;
 }
@@ -66,7 +66,7 @@ function App() {
             <Route path="/blog" element={<BlogIndex />} />
             <Route path="/blog/:slug" element={<ArticleDetail />} />
             <Route path="/checkout/success" element={<Protected><CheckoutSuccess /></Protected>} />
-            <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
+            <Route path="/dashboard" element={<Protected memberOnly><Dashboard /></Protected>} />
             <Route path="/drops" element={<Protected memberOnly><DropsList /></Protected>} />
             <Route path="/drops/:id" element={<Protected memberOnly><DropDetail /></Protected>} />
             <Route path="/vault" element={<Protected memberOnly><VaultIndex /></Protected>} />

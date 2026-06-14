@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { Send, ChevronLeft, MessageCircle } from "lucide-react";
 import { api, fmt } from "../lib/api";
@@ -7,7 +7,18 @@ import { toast } from "sonner";
 
 export function DMInbox() {
   const [threads, setThreads] = useState([]);
-  useEffect(() => { api.get("/dm/threads").then((r) => setThreads(r.data.threads)); }, []);
+  const loadThreads = useCallback(async () => {
+    try {
+      const r = await api.get("/dm/threads");
+      setThreads(r.data.threads);
+    } catch (e) {
+      if (process.env.NODE_ENV === "development") console.error("Failed loading threads", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadThreads();
+  }, [loadThreads]);
   return (
     <div className="min-h-screen px-4 sm:px-6 lg:px-10 py-12">
       <div className="max-w-2xl mx-auto">
@@ -46,14 +57,18 @@ export function DMThread() {
   const [data, setData] = useState({ messages: [], other: null });
   const [body, setBody] = useState("");
   const endRef = useRef(null);
-  const load = () => api.get(`/dm/thread/${id}`).then((r) => setData(r.data));
-  useEffect(() => { load(); const t = setInterval(load, 8000); return () => clearInterval(t); }, [id]);
+  const load = useCallback(() => api.get(`/dm/thread/${id}`).then((r) => setData(r.data)), [id]);
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 8000);
+    return () => clearInterval(t);
+  }, [load]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [data.messages.length]);
   const send = async (e) => {
     e?.preventDefault?.();
     if (!body.trim()) return;
     try { await api.post("/dm/send", { recipient_id: id, body }); setBody(""); load(); }
-    catch { toast.error("Could not send"); }
+    catch (e) { console.error("DM send failed", e); toast.error("Could not send"); }
   };
   return (
     <div className="min-h-screen px-4 sm:px-6 lg:px-10 py-8 flex flex-col">

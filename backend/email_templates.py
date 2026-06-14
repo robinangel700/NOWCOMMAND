@@ -6,6 +6,38 @@ trigger lands a polished email in the recipient's inbox.
 from typing import Dict, Tuple, Callable
 from services.email_service import wrap_html
 
+# In-memory cache of admin overrides {key: {subject_override, html_override}}.
+# Loaded at startup and refreshed whenever the admin edits a template, so that
+# every trigger (onboarding, drops, win-back, etc.) sends the admin's version.
+_OVERRIDES: Dict[str, Dict] = {}
+
+
+class _SafeDict(dict):
+    def __missing__(self, k):
+        return "{" + k + "}"
+
+
+def _fmt(s: str, ctx: Dict) -> str:
+    try:
+        return s.format_map(_SafeDict(ctx))
+    except Exception:
+        return s
+
+
+def set_override(key: str, data: Dict):
+    if data:
+        _OVERRIDES[key] = data
+    else:
+        _OVERRIDES.pop(key, None)
+
+
+def load_overrides(items):
+    _OVERRIDES.clear()
+    for it in items or []:
+        k = it.get("key")
+        if k:
+            _OVERRIDES[k] = it
+
 
 def _onboarding(ctx: Dict) -> Tuple[str, str]:
     fe = ctx.get("frontend", "")
@@ -71,6 +103,75 @@ def _invoice_upcoming(ctx: Dict) -> Tuple[str, str]:
             "<p>No action needed if everything's current.</p>",
             cta_url=f"{fe}/billing",
             cta_label="Manage Billing",
+        ),
+    )
+
+
+def _reengagement_step2(ctx: Dict) -> Tuple[str, str]:
+    fe = ctx.get("frontend", "")
+    return (
+        "Re-engage with NOWCOMMAND — your seat is still waiting",
+        wrap_html(
+            "Your membership is waiting",
+            "<p>You’ve been away, but your seat is still active. Now is a strong moment to return before the next signal fades.</p>"
+            "<p>Open the dashboard and refresh the momentum with one small action.</p>",
+            cta_url=f"{fe}/dashboard",
+            cta_label="Return to the dashboard",
+        ),
+    )
+
+
+def _reengagement_step3(ctx: Dict) -> Tuple[str, str]:
+    fe = ctx.get("frontend", "")
+    return (
+        "Final re-engagement — your NOWCOMMAND seat is still on hold",
+        wrap_html(
+            "This is the last nudge",
+            "<p>Your membership remains available, but the window is narrowing. One small re-entry now keeps the codes alive.</p>"
+            "<p>Open the dashboard to continue where you left off.</p>",
+            cta_url=f"{fe}/dashboard",
+            cta_label="Re-enter NOWCOMMAND",
+        ),
+    )
+
+
+def _payment_succeeded(ctx: Dict) -> Tuple[str, str]:
+    fe = ctx.get("frontend", "")
+    return (
+        "NOWCOMMAND renewal complete",
+        wrap_html(
+            "Your seat is secure.",
+            "<p>Your payment went through successfully. The membership continues without interruption.</p>"
+            "<p>If you want to update your card or review your plan, use the billing page below.</p>",
+            cta_url=f"{fe}/billing",
+            cta_label="Manage Billing",
+        ),
+    )
+
+
+def _subscription_paused(ctx: Dict) -> Tuple[str, str]:
+    fe = ctx.get("frontend", "")
+    return (
+        "NOWCOMMAND membership paused",
+        wrap_html(
+            "Your membership is paused",
+            "<p>Your NOWCOMMAND subscription has been paused. You can resume access at any time from your billing page.</p>",
+            cta_url=f"{fe}/billing",
+            cta_label="Resume membership",
+        ),
+    )
+
+
+def _subscription_resumed(ctx: Dict) -> Tuple[str, str]:
+    fe = ctx.get("frontend", "")
+    return (
+        "NOWCOMMAND membership resumed",
+        wrap_html(
+            "Your membership is active again.",
+            "<p>Your NOWCOMMAND subscription has resumed and the codes are waiting for you inside the dashboard.</p>"
+            "<p>Open the dashboard to continue where you left off.</p>",
+            cta_url=f"{fe}/dashboard",
+            cta_label="Open Dashboard",
         ),
     )
 
@@ -235,6 +336,42 @@ TEMPLATES: Dict[str, Dict] = {
         "fn": _payment_failed,
         "variables": ["frontend"],
     },
+    "payment_succeeded": {
+        "label": "Renewal success",
+        "trigger": "Stripe webhook 'invoice.payment_succeeded'.",
+        "fn": _payment_succeeded,
+        "variables": ["frontend"],
+    },
+    "subscription_paused": {
+        "label": "Subscription paused",
+        "trigger": "Stripe webhook 'customer.subscription.paused'.",
+        "fn": _subscription_paused,
+        "variables": ["frontend"],
+    },
+    "subscription_resumed": {
+        "label": "Subscription resumed",
+        "trigger": "Stripe webhook 'customer.subscription.resumed'.",
+        "fn": _subscription_resumed,
+        "variables": ["frontend"],
+    },
+    "reengagement_step2": {
+        "label": "Re-engagement sequence: step 2",
+        "trigger": "Automated re-engagement sequence for inactive members.",
+        "fn": _reengagement_step2,
+        "variables": ["frontend"],
+    },
+    "reengagement_step3": {
+        "label": "Re-engagement sequence: step 3",
+        "trigger": "Automated re-engagement sequence for inactive members.",
+        "fn": _reengagement_step3,
+        "variables": ["frontend"],
+    },
+    "subscription_resumed": {
+        "label": "Subscription resumed",
+        "trigger": "Stripe webhook 'customer.subscription.resumed'.",
+        "fn": _subscription_resumed,
+        "variables": ["frontend"],
+    },
     "invoice_upcoming": {
         "label": "Renewal heads-up / card expiration",
         "trigger": "Stripe webhook 'invoice.upcoming'.",
@@ -302,4 +439,13 @@ def render(key: str, ctx: Dict) -> Tuple[str, str]:
     tpl = TEMPLATES.get(key)
     if not tpl:
         raise KeyError(f"Unknown email template: {key}")
-    return tpl["fn"](ctx)
+    subj, html = tpl["fn"](ctx)
+    ov = _OVERRIDES.get(key)
+    if ov:
+        if ov.get("subject_override"):
+            subj = _fmt(ov["subject_override"], ctx)
+        if ov.get("html_override"):
+            # Admin writes the body content (HTML allowed); we wrap it in the
+            # branded shell so it always looks polished.
+            html = wrap_html(subj, _fmt(ov["html_override"], ctx))
+    return subj, html

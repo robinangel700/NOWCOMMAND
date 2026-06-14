@@ -13,19 +13,28 @@ const LESSONS = [
 ];
 
 export default function StewardIdentity() {
-  const [done, setDone] = useState(() => JSON.parse(localStorage.getItem("steward_lessons_done") || "{}"));
+  const [done, setDone] = useState({});
   useEffect(() => {
     api.get("/admin/identity-progress").then((r) => {
       if (r.data?.progress && Object.keys(r.data.progress).length) {
-        setDone(r.data.progress);
-        localStorage.setItem("steward_lessons_done", JSON.stringify(r.data.progress));
+        // Normalize numeric keys to lesson titles for stable keys
+        const p = r.data.progress || {};
+        const normalized = {};
+        Object.keys(p).forEach((k) => {
+          if (!Number.isNaN(Number(k)) && LESSONS[Number(k)]) {
+            normalized[LESSONS[Number(k)].title] = p[k];
+          } else {
+            normalized[k] = p[k];
+          }
+        });
+        setDone((cur) => ({ ...cur, ...normalized }));
       }
-    }).catch(() => {});
+    }).catch((e) => { console.error("Identity progress load failed", e); });
   }, []);
-  const toggle = (i) => {
-    const n = { ...done, [i]: !done[i] }; setDone(n);
-    localStorage.setItem("steward_lessons_done", JSON.stringify(n));
-    api.patch("/admin/identity-progress", n).catch(() => {});
+  const toggle = (key) => {
+    const n = { ...done, [key]: !done[key] };
+    setDone(n);
+    api.patch("/admin/identity-progress", n).catch((e) => { console.error("Identity progress save failed", e); });
   };
   const completed = Object.values(done).filter(Boolean).length;
   return (
@@ -35,12 +44,12 @@ export default function StewardIdentity() {
       <p className="text-textMuted mt-3 max-w-2xl">For Robin only. Walk through one lesson per day. The platform will run with or without you — these lessons make sure <em>you</em> run from rest, praise, and the right identity while it does. {completed}/{LESSONS.length} complete.</p>
       <div className="h-2 bg-borderGold mt-4 relative overflow-hidden max-w-md"><div className="absolute inset-y-0 left-0 bg-gold" style={{width:`${(completed/LESSONS.length)*100}%`}}/></div>
       <div className="space-y-3 mt-8">
-        {LESSONS.map((l, i) => (
-          <div key={i} className={`panel p-6 ${done[i] ? "opacity-70" : ""}`}>
+        {LESSONS.map((l) => (
+          <div key={l.title} className={`panel p-6 ${done[l.title] ? "opacity-70" : ""}`}>
             <div className="flex items-start gap-4">
-              <button onClick={() => toggle(i)} className="shrink-0 mt-1">{done[i] ? <CheckSquare className="w-5 h-5 text-gold"/> : <Square className="w-5 h-5 text-textMuted"/>}</button>
+              <button onClick={() => toggle(l.title)} className="shrink-0 mt-1">{done[l.title] ? <CheckSquare className="w-5 h-5 text-gold"/> : <Square className="w-5 h-5 text-textMuted"/>}</button>
               <div>
-                <h3 className={`font-display text-xl ${done[i] ? "line-through text-textMuted" : "text-cream"}`}>{l.title}</h3>
+                <h3 className={`font-display text-xl ${done[l.title] ? "line-through text-textMuted" : "text-cream"}`}>{l.title}</h3>
                 <p className="text-cream/90 leading-relaxed mt-2">{l.body}</p>
               </div>
             </div>

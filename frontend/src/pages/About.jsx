@@ -6,7 +6,7 @@ export default function About() {
   useEffect(() => { api.get("/public/state").then(() => {}); }, []);
   // Manifesto requires auth in our setup; show static fallback if public
   useEffect(() => { (async () => {
-    try { const r = await api.get("/community/feed"); setM(r.data.manifesto?.body_md); } catch {}
+    try { const r = await api.get("/community/feed"); setM(r.data.manifesto?.body_md); } catch (e) { console.error("Could not load manifesto", e); }
   })(); }, []);
   return (
     <div className="min-h-screen px-6 lg:px-10 py-24">

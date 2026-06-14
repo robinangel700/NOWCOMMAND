@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "../lib/auth";
@@ -14,12 +14,23 @@ export default function Auth({ mode = "login" }) {
   const [params] = useSearchParams();
   const plan = params.get("plan");
 
+  // Capture affiliate referral code from URL on signup page
+  useEffect(() => {
+    const ref = params.get("ref");
+    if (ref) {
+      sessionStorage.setItem("affiliate_ref", ref.trim().toUpperCase());
+    }
+  }, [params]);
+
   const onSubmit = async (e) => {
     e.preventDefault();
     setBusy(true);
     try {
       if (mode === "login") await login(email, password);
-      else await signup(email, password, name);
+      else {
+        const ref = sessionStorage.getItem("affiliate_ref") || undefined;
+        await signup(email, password, name, ref);
+      }
       toast.success(mode === "login" ? "Welcome back" : "Account created. Now claim your seat.");
       if (plan) nav(`/pricing?auto=${plan}`); else nav("/dashboard");
     } catch (e) {
@@ -35,7 +46,14 @@ export default function Auth({ mode = "login" }) {
           <div className="overline">// NOWCOMMAND</div>
         </div>
         <h1 className="font-display text-5xl text-cream leading-none mb-3">{mode === "login" ? "Re-enter" : "Cross over"}</h1>
-        <p className="text-textMuted mb-10">{mode === "login" ? "Sign back into the realm." : "Create your seat. Stripe checkout is the next step."}</p>
+        <p className="text-textMuted mb-4">{mode === "login" ? "Sign back into the realm." : "Create your seat. Stripe checkout is the next step."}</p>
+        {plan && (
+          <div className="mb-6 rounded border border-gold/20 bg-gold/5 p-4 text-sm text-cream">
+            {mode === "login"
+              ? "After signing in, you'll be redirected to Stripe checkout to complete your purchase."
+              : "After creating your account, you'll be sent straight into Stripe checkout to complete your purchase."}
+          </div>
+        )}
         <form onSubmit={onSubmit} className="space-y-6">
           {mode === "signup" && (
             <div>

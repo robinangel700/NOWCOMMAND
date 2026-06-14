@@ -8,13 +8,11 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const t = localStorage.getItem("nowcommand_token");
-    if (!t) { setUser(null); setLoading(false); return; }
     try {
       const { data } = await api.get("/auth/me");
       setUser(data.user);
-    } catch {
-      localStorage.removeItem("nowcommand_token");
+    } catch (e) {
+      console.error("Auth refresh failed", e);
       setUser(null);
     } finally { setLoading(false); }
   }, []);
@@ -23,18 +21,22 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
-    localStorage.setItem("nowcommand_token", data.token);
+    // Auth cookie is set by the server (httpOnly). Do not store token in localStorage.
     setUser(data.user);
     return data.user;
   };
-  const signup = async (email, password, name) => {
-    const { data } = await api.post("/auth/signup", { email, password, name });
-    localStorage.setItem("nowcommand_token", data.token);
+  const signup = async (email, password, name, ref) => {
+    const payload = { email, password, name };
+    if (ref) payload.ref = ref;
+    const { data } = await api.post("/auth/signup", payload);
+    // Server sets httpOnly cookie on signup.
     setUser(data.user);
     return data.user;
   };
-  const logout = () => {
-    localStorage.removeItem("nowcommand_token");
+  const logout = async () => {
+    try {
+      await api.post("/auth/logout");
+    } catch (e) { console.error("Logout failed", e); }
     setUser(null);
   };
 

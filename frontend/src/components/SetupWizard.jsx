@@ -24,7 +24,7 @@ export default function SetupWizard({ onClose }) {
 
   const saveProfile = async () => {
     try { await api.patch("/me/profile", profile); await refresh(); next(); }
-    catch { toast.error("Couldn't save profile"); }
+    catch (e) { console.error("Save profile failed", e); toast.error("Couldn't save profile"); }
   };
   const downloadCodes = async () => {
     try {
@@ -33,16 +33,16 @@ export default function SetupWizard({ onClose }) {
       const a = document.createElement("a"); a.href = url;
       a.download = "Mammon_Breaker_Activation_Codes.pdf"; a.click();
       window.URL.revokeObjectURL(url); toast.success("Downloaded");
-    } catch { toast.error("Could not download"); }
+    } catch (e) { console.error("Wizard download failed", e); toast.error("Could not download"); }
   };
   const postWin = async () => {
     if (!win.trim()) { next(); return; }
     try { await api.post("/community/posts", { body: win, kind: "win" }); toast.success("Posted to the win thread"); next(); }
-    catch { toast.error("Could not post"); }
+    catch (e) { console.error("Wizard win post failed", e); toast.error("Could not post"); }
   };
   const complete = async () => {
     try { await api.patch("/me/profile", { setup_completed: true }); await refresh(); onClose?.(); }
-    catch { onClose?.(); }
+    catch (e) { console.error("Wizard completion failed", e); onClose?.(); }
   };
 
   return (

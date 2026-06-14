@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Sparkles, CheckSquare, Square, Send, Users, Hourglass, Mail, FileText, MessageSquare, Bell, Plus, Rocket, BookOpen, UserCog, ChevronRight, ExternalLink, AtSign, Edit3, ArrowRight, Eye, Award, Palette, DollarSign, Megaphone, HandHeart, Copy } from "lucide-react";
 import { api, fmt, BACKEND_URL } from "../lib/api";
@@ -96,7 +96,7 @@ function LaunchWizard({ onJump }) {
   const launch = async () => {
     if (!window.confirm("Launch NOWCOMMAND now? This starts the 21-day $44 founder window.")) return;
     try { await api.post("/admin/launch"); toast.success("LAUNCHED."); load(); }
-    catch { toast.error("Launch failed"); }
+    catch (e) { console.error("Launch failed", e); toast.error("Launch failed"); }
   };
   if (!items || !state || !stats) return null;
   const done = items.filter((i) => i.done).length;
@@ -117,14 +117,14 @@ function LaunchWizard({ onJump }) {
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-px bg-borderGold">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-px bg-borderGold">
         {[
           { l: "Active members", v: stats.members_active, sub: `${stats.members_full} sovereign / ${stats.members_foundational} foundational` },
           { l: "Drops published", v: stats.drops_published, sub: `${stats.drops} total` },
           { l: "Articles published", v: stats.articles_published, sub: `${stats.vault_articles} vault / ${stats.articles - stats.articles_published} drafts` },
           { l: "Leads + Waitlist", v: stats.leads + stats.waitlist, sub: `${stats.leads} optins / ${stats.waitlist} waitlist` },
-        ].map((s, i) => (
-          <div key={i} className="bg-void p-6">
+        ].map((s) => (
+          <div key={s.l} className="bg-void p-6">
             <div className="overline mb-2">{s.l}</div>
             <div className="font-display text-4xl text-cream">{s.v}</div>
             <div className="text-xs font-mono text-textDim mt-2">{s.sub}</div>
@@ -234,7 +234,7 @@ function DropForm({ initial, onSaved, onCancel }) {
         <label className="overline">// RELATED LINKS</label>
         <div className="space-y-2 mt-2">
           {(d.related_links || []).map((l, i) => (
-            <div key={i} className="flex gap-2">
+            <div key={`${l.url || l.title}-${i}`} className="flex gap-2">
               <input value={l.title || ""} onChange={(e) => updLink(i, "title", e.target.value)} placeholder="Title" className="flex-1"/>
               <input value={l.url || ""} onChange={(e) => updLink(i, "url", e.target.value)} placeholder="https://..." className="flex-1"/>
               <button type="button" onClick={() => delLink(i)} className="btn-ghost text-xs !border-ruby !text-ruby">×</button>
@@ -404,14 +404,121 @@ function Articles() {
 /* ----------------- MEMBERS / LEADS ----------------- */
 function Members() {
   const [data, setData] = useState(null);
-  useEffect(() => { api.get("/admin/members").then((r) => setData(r.data)); }, []);
+  const [editing, setEditing] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // { member, step: 1|2|3 }
+  const load = () => api.get("/admin/members").then((r) => setData(r.data));
+  useEffect(() => { load(); }, []);
+  const saveEdit = async () => {
+    if (!editing) return;
+    const payload = {};
+    if (editing.name !== undefined) payload.name = editing.name;
+    if (editing.email !== undefined) payload.email = editing.email;
+    if (editing.tier !== undefined) payload.tier = editing.tier;
+    if (editing.is_active !== undefined) payload.is_active = editing.is_active;
+    payload.confirm = true;
+    try {
+      await api.patch(`/admin/members/${editing.id}`, payload);
+      toast.success("Member updated");
+      setEditing(null);
+      load();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Update failed"); }
+  };
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    try {
+      await api.delete(`/admin/members/${deleteConfirm.member.id}?confirm=true`);
+      toast.success("Member deleted");
+      setDeleteConfirm(null);
+      load();
+    } catch (e) { toast.error(e?.response?.data?.detail || "Delete failed"); }
+  };
   if (!data) return null;
   return (
     <div>
       <div className="overline mb-3">// {data.count_active} active &middot; {data.members.length} total</div>
+
+      {/* Edit panel */}
+      {editing && (
+        <div className="panel p-6 mb-6 border-gold">
+          <div className="overline mb-3">// EDITING: {editing.email}</div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <label className="overline">// NAME</label>
+              <input value={editing.name || ""} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+            </div>
+            <div>
+              <label className="overline">// EMAIL</label>
+              <input value={editing.email || ""} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
+            </div>
+            <div>
+              <label className="overline">// TIER</label>
+              <select value={editing.tier || "none"} onChange={(e) => setEditing({ ...editing, tier: e.target.value })}>
+                <option value="none">None</option>
+                <option value="full">Full (Sovereign)</option>
+                <option value="foundational">Foundational</option>
+                <option value="canceled">Canceled</option>
+              </select>
+            </div>
+            <div>
+              <label className="overline">// ACTIVE</label>
+              <select value={editing.is_active ? "true" : "false"} onChange={(e) => setEditing({ ...editing, is_active: e.target.value === "true" })}>
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-3 mt-6">
+            <button onClick={saveEdit} className="btn-gold">Save changes</button>
+            <button onClick={() => setEditing(null)} className="btn-ghost">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation panel */}
+      {deleteConfirm && (
+        <div className="panel p-6 mb-6 border-ruby">
+          <div className="overline text-ruby mb-3">// DELETE MEMBER</div>
+          {deleteConfirm.step === 1 && (
+            <>
+              <p className="text-cream mb-4">Are you sure you want to delete <strong>{deleteConfirm.member.email}</strong>? This cannot be undone.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setDeleteConfirm({ ...deleteConfirm, step: 2 })} className="btn-gold !bg-ruby !border-ruby">Yes, delete this member</button>
+                <button onClick={() => setDeleteConfirm(null)} className="btn-ghost">Cancel</button>
+              </div>
+            </>
+          )}
+          {deleteConfirm.step === 2 && (
+            <>
+              <p className="text-cream mb-4">This will permanently delete <strong>{deleteConfirm.member.email}</strong> and all their data (notes, bookmarks, posts, comments, transactions). Are you absolutely sure?</p>
+              <div className="flex gap-3">
+                <button onClick={() => setDeleteConfirm({ ...deleteConfirm, step: 3 })} className="btn-gold !bg-ruby !border-ruby">Yes, permanently delete</button>
+                <button onClick={() => setDeleteConfirm(null)} className="btn-ghost">Cancel</button>
+              </div>
+            </>
+          )}
+          {deleteConfirm.step === 3 && (
+            <>
+              <p className="text-cream mb-4">Final confirmation. Type <strong className="text-ruby">DELETE</strong> below to confirm:</p>
+              <input
+                placeholder='Type "DELETE" to confirm'
+                className="mb-4"
+                onChange={(e) => {
+                  if (e.target.value === "DELETE") {
+                    confirmDelete();
+                  }
+                }}
+              />
+              <div className="flex gap-3">
+                <button onClick={() => setDeleteConfirm(null)} className="btn-ghost">Cancel</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="overflow-x-auto panel">
         <table className="w-full text-sm">
-          <thead><tr className="text-left border-b border-borderGold"><th className="p-3 overline">Email</th><th className="p-3 overline">Name</th><th className="p-3 overline">Tier</th><th className="p-3 overline">Joined</th><th className="p-3 overline">Last login</th></tr></thead>
+          <thead><tr className="text-left border-b border-borderGold"><th className="p-3 overline">Email</th><th className="p-3 overline">Name</th><th className="p-3 overline">Tier</th><th className="p-3 overline">Joined</th><th className="p-3 overline">Last login</th><th className="p-3 overline">Actions</th></tr></thead>
           <tbody>
             {data.members.map((m) => (
               <tr key={m.id} className="border-b border-borderGold/50">
@@ -420,6 +527,12 @@ function Members() {
                 <td className="p-3"><span className="overline">{m.tier}</span></td>
                 <td className="p-3 text-xs font-mono text-textDim">{fmt.date(m.created_at)}</td>
                 <td className="p-3 text-xs font-mono text-textDim">{fmt.date(m.last_login)}</td>
+                <td className="p-3">
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditing({ ...m })} className="btn-ghost text-xs !py-1 !px-2"><Edit3 className="w-3 h-3"/></button>
+                    <button onClick={() => setDeleteConfirm({ member: m, step: 1 })} className="btn-ghost text-xs !py-1 !px-2 !border-ruby !text-ruby">Delete</button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -569,8 +682,11 @@ function Reminders() {
 function EmailTemplates() {
   const [templates, setTemplates] = useState([]);
   const [selected, setSelected] = useState(null);
-  const load = () => api.get("/admin/email-templates").then((r) => { setTemplates(r.data.templates); if (!selected && r.data.templates.length) setSelected(r.data.templates[0]); });
-  useEffect(() => { load(); }, []);
+  const load = useCallback(() => api.get("/admin/email-templates").then((r) => {
+    setTemplates(r.data.templates);
+    setSelected((current) => current || (r.data.templates.length ? r.data.templates[0] : null));
+  }), []);
+  useEffect(() => { load(); }, [load]);
   const sendTest = async (key) => {
     const r = await api.post(`/admin/email-templates/${key}/send-test`);
     toast.success(`Test email ${r.data.status}`);
@@ -635,7 +751,7 @@ function LaunchPanel() {
   useEffect(() => { load(); }, []);
   const launch = async () => {
     if (!window.confirm("Launch NOWCOMMAND now? Starts the 21-day $44 founder window.")) return;
-    try { const r = await api.post("/admin/launch"); toast.success("Launched"); setState({ launched: true, launch_date: r.data.launch_date, promo_days: r.data.promo_days }); } catch { toast.error("Launch failed"); }
+    try { const r = await api.post("/admin/launch"); toast.success("Launched"); setState({ launched: true, launch_date: r.data.launch_date, promo_days: r.data.promo_days }); } catch (e) { console.error("Launch failed", e); toast.error("Launch failed"); }
   };
   const triggerWB = async () => { await api.post("/admin/trigger-winback"); toast.success("Win-back swept"); };
   const triggerDrops = async () => { await api.post("/admin/trigger-drops"); toast.success("Drops swept"); };
@@ -797,7 +913,7 @@ function AdCopyTab() {
             <>
               <button onClick={generate} className="btn-gold">Generate 5 variants</button>
               {variants.map((v, i) => (
-                <div key={i} className="panel p-4">
+                <div key={`${v.platform}-${i}`} className="panel p-4">
                   <div className="overline mb-2">{v.platform}</div>
                   <pre className="whitespace-pre-wrap text-cream/95 text-sm font-body">{v.copy}</pre>
                   <button onClick={() => copy(v.copy)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/>Copy</button>
@@ -992,8 +1108,14 @@ function NotifPrefsTab() {
       {tog("admin_on_cancel", "Someone cancels", "Reach out personally — sometimes it's just a season.")}
       {tog("admin_on_testimonial", "A testimonial is submitted", "Approve and feature within 24 hours.")}
       {tog("admin_on_payment_failed", "A payment fails", "You may want to DM them while Stripe auto-retries.")}
+      {tog("admin_on_payment_succeeded", "A renewal succeeds", "See when a customer successfully renews their membership.")}
+      {tog("admin_on_subscription_paused", "A subscription is paused", "Monitor members who pause so you can follow up.")}
+      {tog("admin_on_subscription_resumed", "A subscription is resumed", "Know when a member returns to active status.")}
       {tog("admin_on_lead", "A blog lead opts in", "Useful when running ads. Off by default.")}
       {tog("admin_on_post", "A community post is made", "Useful at launch, off as it grows.")}
+      <div className="mt-6 p-4 rounded border border-gold/20 bg-gold/5 text-sm text-cream">
+        Automatic re-engagement is active for inactive members. The platform sends up to three members-only re-entry emails at 14, 21, and 28 days of inactivity.
+      </div>
       <div className="overline mt-6">// DIGEST FREQUENCY</div>
       <select value={p.admin_digest_frequency} onChange={(e) => setP({ ...p, admin_digest_frequency: e.target.value })}>
         <option value="instant">Instant (every event)</option>

@@ -20,12 +20,12 @@ export default function Testimonials() {
       const data = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(f); });
       const resp = await api.post("/upload/image", { data, purpose: "testimonial" });
       setImageUrl(resp.data.url); toast.success("Image attached");
-    } catch { toast.error("Upload failed"); } finally { setUploading(false); }
+    } catch (e) { console.error("Testimonial image upload failed", e); toast.error("Upload failed"); } finally { setUploading(false); }
   };
   const submit = async (e) => { e.preventDefault();
     if (!body.trim()) return;
     try { await api.post("/testimonials", { headline, body, image_url: imageUrl }); toast.success("Submitted — Robin will review."); setBody(""); setHeadline(""); setImageUrl(""); }
-    catch { toast.error("Submit failed"); }
+    catch (e) { console.error("Testimonial submission failed", e); toast.error("Submit failed"); }
   };
   const fullUrl = (u) => (!u ? "" : u.startsWith("http") ? u : `${BACKEND_URL}${u}`);
   return (

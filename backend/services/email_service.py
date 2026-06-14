@@ -8,6 +8,23 @@ from db import get_db, now_iso
 log = logging.getLogger("email")
 
 
+async def _email_config() -> dict:
+    """Resolve the From address + reply-to. Admin settings override env."""
+    db = get_db()
+    s = await db.settings.find_one({"key": "email_settings"}, {"_id": 0})
+    v = (s or {}).get("value") or {}
+    from_email = (v.get("from_email") or "").strip()
+    from_name = (v.get("from_name") or "NOWCOMMAND").strip()
+    reply_to = (v.get("reply_to") or "").strip()
+    if from_email:
+        from_full = f"{from_name} <{from_email}>"
+    else:
+        from_full = os.environ.get("EMAIL_FROM", "NOWCOMMAND <onboarding@resend.dev>")
+        from_email = from_full.split("<")[-1].rstrip(">").strip()
+    using_dev_domain = from_email.endswith("@resend.dev")
+    return {"from_full": from_full, "from_email": from_email, "reply_to": reply_to, "using_dev_domain": using_dev_domain}
+
+
 async def send_email(to: str, subject: str, html: str, kind: str = "transactional", text: Optional[str] = None) -> dict:
     """Always log to outbox collection; deliver via Resend if API key set."""
     db = get_db()
@@ -29,12 +46,15 @@ async def send_email(to: str, subject: str, html: str, kind: str = "transactiona
         try:
             import resend
             resend.api_key = api_key
+            cfg = await _email_config()
             params = {
-                "from": os.environ.get("EMAIL_FROM", "Robin Angel <onboarding@resend.dev>"),
+                "from": cfg["from_full"],
                 "to": [to],
                 "subject": subject,
                 "html": html,
             }
+            if cfg["reply_to"]:
+                params["reply_to"] = cfg["reply_to"]
             r = resend.Emails.send(params)
             record["status"] = "sent"
             record["sent_at"] = now_iso()

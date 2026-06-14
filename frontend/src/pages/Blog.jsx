@@ -1,8 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { ArrowRight, Lock, Hourglass, Mail, ChevronLeft, Eye } from "lucide-react";
+import { ArrowRight, Lock, Hourglass, Mail, ChevronLeft, Eye, Play, Quote } from "lucide-react";
+import { marked } from "marked";
 import { api, fmt } from "../lib/api";
 import { toast } from "sonner";
+
+const md = (s) => ({ __html: marked.parse(s || "", { breaks: true }) });
+const ytId = (url) => {
+  if (!url) return null;
+  const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
+  return m ? m[1] : null;
+};
 
 export function BlogIndex() {
   const [data, setData] = useState({ articles: [], vault_peek: [] });
@@ -15,7 +23,7 @@ export function BlogIndex() {
     e.preventDefault();
     if (!email) return;
     try { await api.post("/public/lead", { email, source: "blog_index" }); toast.success("You're on the list. Watch your inbox."); setEmail(""); }
-    catch { toast.error("Could not subscribe"); }
+    catch (e) { console.error("Blog opt-in failed", e); toast.error("Could not subscribe"); }
   };
   return (
     <div className="min-h-screen px-6 lg:px-10 py-16">
@@ -120,7 +128,7 @@ export function ArticleDetail() {
   const optin = async (e) => {
     e.preventDefault();
     try { await api.post("/public/lead", { email, source: slug }); toast.success("Subscribed."); setEmail(""); }
-    catch { toast.error("Could not subscribe"); }
+    catch (e) { console.error("Article opt-in failed", e); toast.error("Could not subscribe"); }
   };
   if (notFound) return <div className="min-h-screen flex items-center justify-center"><div className="text-center"><div className="overline mb-2">// 404</div><h1 className="font-display text-4xl text-cream">Lost in transit</h1><button onClick={() => nav("/blog")} className="btn-gold mt-6">Back to blog</button></div></div>;
   if (!a) return <div className="min-h-screen flex items-center justify-center"><Hourglass className="w-6 h-6 text-gold animate-glow"/></div>;
@@ -132,7 +140,7 @@ export function ArticleDetail() {
           <div className="absolute inset-0 bg-gradient-to-b from-void/40 via-void/60 to-void"/>
         </div>
       )}
-      <div className="max-w-3xl mx-auto px-6 lg:px-10 -mt-32 relative">
+      <div className={`max-w-3xl mx-auto px-6 lg:px-10 relative ${a.cover_image_url ? "-mt-32" : "mt-10"}`}>
         <button onClick={() => nav("/blog")} className="overline flex items-center gap-2 mb-6"><ChevronLeft className="w-4 h-4"/>Back to blog</button>
         <div className="overline mb-4">{(a.tags && a.tags[0]) || "ESSAY"} &middot; {fmt.date(a.published_at)}</div>
         <h1 className="font-display text-5xl md:text-7xl text-cream leading-[1.0]">{a.title}</h1>

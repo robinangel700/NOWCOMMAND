@@ -60,29 +60,29 @@ export default function Stewardship() {
   const pause = async () => {
     setBusy(true);
     try { await api.post("/billing/cancel", { action: "pause" }); await refresh(); toast.success("Paused. Resume anytime."); setStage("idle"); setStep(0); }
-    catch { toast.error("Couldn't pause"); } finally { setBusy(false); }
+    catch (e) { console.error("Pause request failed", e); toast.error("Couldn't pause"); } finally { setBusy(false); }
   };
   const resume = async () => {
     setBusy(true);
     try { await api.post("/billing/resume"); await refresh(); toast.success("Resumed."); }
-    catch { toast.error("Couldn't resume"); } finally { setBusy(false); }
+    catch (e) { console.error("Resume request failed", e); toast.error("Couldn't resume"); } finally { setBusy(false); }
   };
   const downgrade = async () => {
     setBusy(true);
     try { await api.post("/billing/cancel", { action: "downgrade" }); await refresh(); toast.success("Switched to Foundational ($11/mo)"); setStage("idle"); setStep(0); }
-    catch { toast.error("Couldn't downgrade"); } finally { setBusy(false); }
+    catch (e) { console.error("Downgrade request failed", e); toast.error("Couldn't downgrade"); } finally { setBusy(false); }
   };
   const finalCancel = async () => {
     setBusy(true);
     const finalReason = reason === "Other" ? reasonOther : reason;
     try { await api.post("/billing/cancel", { action: "cancel", reason: finalReason }); await refresh(); toast.success("Membership released."); nav("/"); }
-    catch { toast.error("Couldn't cancel"); } finally { setBusy(false); }
+    catch (e) { console.error("Cancellation request failed", e); toast.error("Couldn't cancel"); } finally { setBusy(false); }
   };
   const openPortal = async () => {
     try {
       const { data } = await api.post("/billing/portal", { return_url: window.location.origin + "/stewardship" });
       if (data.url) window.location.href = data.url;
-    } catch { toast.error("Portal unavailable (dev mode)"); }
+    } catch (e) { console.error("Open portal request failed", e); toast.error("Portal unavailable (dev mode)"); }
   };
 
   const startFunnel = () => { setStage("funnel"); setStep(0); };
@@ -174,7 +174,7 @@ function CancelFunnel({ step, setStep, reason, setReason, reasonOther, setReason
           <button data-testid="funnel-close" onClick={onClose} className="text-textMuted hover:text-cream"><X className="w-5 h-5"/></button>
         </div>
         <div className="flex gap-1 mb-8">
-          {STEPS.map((_, i) => (<div key={i} className={`flex-1 h-1 ${i <= step ? "bg-gold" : "bg-borderGold"}`}/>))}
+          {STEPS.map((s, i) => (<div key={s} className={`flex-1 h-1 ${i <= step ? "bg-gold" : "bg-borderGold"}`}/>))}
         </div>
 
         {stage === "breathe" && (
@@ -269,8 +269,8 @@ function CancelFunnel({ step, setStep, reason, setReason, reasonOther, setReason
             <h2 className="font-display text-4xl text-cream">Before you go — what you lose</h2>
             <p className="text-textMuted mt-3">Cancellation is final. The following is permanently removed:</p>
             <ul className="mt-6 space-y-3">
-              {LOST_LIST.map((s, i) => (
-                <li key={i} data-testid={`loss-${i}`} className="flex gap-3 text-cream/85"><X className="w-4 h-4 text-ruby mt-0.5 shrink-0"/><span>{s}</span></li>
+              {LOST_LIST.map((s) => (
+                <li key={s} data-testid={`loss-${s}`} className="flex gap-3 text-cream/85"><X className="w-4 h-4 text-ruby mt-0.5 shrink-0"/><span>{s}</span></li>
               ))}
             </ul>
             <div className="flex gap-3 mt-8 flex-wrap">
@@ -300,8 +300,51 @@ function CancelFunnel({ step, setStep, reason, setReason, reasonOther, setReason
 
 /* ------------- Affiliate panel (high-value, stewardship-framed) ------------- */
 function AffiliatePanel({ affiliate }) {
+  const [connectStatus, setConnectStatus] = useState(null);
+  const [payoutBusy, setPayoutBusy] = useState(false);
+  const [payouts, setPayouts] = useState([]);
+  const [connectBusy, setConnectBusy] = useState(false);
+
+  useEffect(() => {
+    api.get("/affiliate/connect-status").then((r) => setConnectStatus(r.data)).catch(() => {});
+    api.get("/affiliate/payouts").then((r) => setPayouts(r.data.payouts || [])).catch(() => {});
+  }, []);
+
   if (!affiliate) return null;
   const copy = (t) => { navigator.clipboard.writeText(t); toast.success("Copied"); };
+
+  const setupConnect = async () => {
+    setConnectBusy(true);
+    try {
+      const { data } = await api.post("/affiliate/connect");
+      if (data.onboarding_url) {
+        window.location.href = data.onboarding_url;
+      } else {
+        setConnectStatus(data);
+        toast.success("Connect account ready");
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Could not set up payout account");
+    } finally { setConnectBusy(false); }
+  };
+
+  const requestPayout = async () => {
+    setPayoutBusy(true);
+    try {
+      const { data } = await api.post("/affiliate/request-payout");
+      toast.success(`Payout of ${fmt.money(data.amount_cents)} initiated`);
+      setPayouts((prev) => [data, ...prev]);
+      // Refresh affiliate data to show zeroed earnings
+      const r = await api.get("/affiliate/me");
+      if (r.data) Object.assign(affiliate, r.data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Could not request payout");
+    } finally { setPayoutBusy(false); }
+  };
+
+  const connected = connectStatus?.connected && connectStatus?.onboarding_complete;
+  const payoutsEnabled = connectStatus?.payouts_enabled;
+
   return (
     <div className="space-y-8">
       <div className="panel p-8 border-gold/50">
@@ -319,6 +362,53 @@ function AffiliatePanel({ affiliate }) {
           <button data-testid="copy-affiliate" onClick={() => copy(affiliate.link)} className="btn-ghost mt-3 text-xs"><Copy className="w-3 h-3"/>Copy</button>
         </div>
       </div>
+
+      {/* Stripe Connect Payout Account */}
+      <div className="panel p-6">
+        <div className="overline mb-2">// PAYOUT ACCOUNT</div>
+        <h3 className="font-display text-2xl text-cream">Receive your earnings</h3>
+        <p className="text-textMuted text-sm mt-2 max-w-xl">
+          {connected
+            ? "Your Stripe payout account is connected and ready. Funds are transferred directly to your bank."
+            : "Connect a Stripe Express account to receive payouts. You'll complete a short KYC verification with Stripe."}
+        </p>
+        {!connected && (
+          <button data-testid="connect-stripe" onClick={setupConnect} disabled={connectBusy} className="btn-gold mt-4">
+            {connectBusy ? "Setting up..." : "Connect Stripe payout account"}
+          </button>
+        )}
+        {connected && !payoutsEnabled && (
+          <div className="mt-4 p-3 border border-ruby/60 bg-ruby/10 text-sm text-cream">
+            Your account is connected but payouts are not yet enabled. Check your Stripe Express dashboard for requirements.
+          </div>
+        )}
+        {connected && payoutsEnabled && affiliate.earnings_cents >= 1000 && (
+          <button data-testid="request-payout" onClick={requestPayout} disabled={payoutBusy} className="btn-gold mt-4">
+            {payoutBusy ? "Processing..." : `Request payout (${fmt.money(affiliate.earnings_cents)})`}
+          </button>
+        )}
+        {connected && payoutsEnabled && affiliate.earnings_cents < 1000 && affiliate.earnings_cents > 0 && (
+          <p className="text-textMuted text-xs mt-3">Minimum payout is $10.00. You're {fmt.money(1000 - affiliate.earnings_cents)} away.</p>
+        )}
+      </div>
+
+      {/* Payout History */}
+      {payouts.length > 0 && (
+        <div>
+          <h3 className="font-display text-xl text-cream mb-3">Payout history</h3>
+          <div className="space-y-2">
+            {payouts.map((p) => (
+              <div key={p.id} className="panel p-3 flex items-center justify-between">
+                <div>
+                  <div className="text-cream text-sm">{fmt.money(p.amount_cents)}</div>
+                  <div className="text-xs font-mono text-textDim">{fmt.datetime(p.created_at)}</div>
+                </div>
+                <div className="text-xs font-mono uppercase text-textMuted">{p.status}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <h3 className="font-display text-2xl text-cream">Recent stewardships</h3>
       <div className="space-y-2">
@@ -367,7 +457,7 @@ function SalesWizard({ affiliate }) {
   return (
     <div className="space-y-6" data-testid="sales-wizard">
       <div className="flex gap-1">
-        {STEPS.map((_, i) => <div key={i} className={`flex-1 h-1 ${i <= step ? "bg-gold" : "bg-borderGold"}`}/>)}
+        {STEPS.map((st, i) => <div key={st} className={`flex-1 h-1 ${i <= step ? "bg-gold" : "bg-borderGold"}`}/>)}
       </div>
       {stage === "frame" && (
         <div className="panel p-8">
@@ -389,11 +479,11 @@ function SalesWizard({ affiliate }) {
         <div className="panel p-8">
           <div className="overline mb-3">// STEP 3 · PICK A HOOK</div>
           <p className="text-textMuted mb-4">Post one of these to your socials today. Add a personal line at the top.</p>
-          <div className="space-y-2">
-            {PROVEN_HOOKS.map((h, i) => (
-              <div key={i} className="panel p-4 flex items-start justify-between gap-3">
+            <div className="space-y-2">
+            {PROVEN_HOOKS.map((h) => (
+              <div key={h} className="panel p-4 flex items-start justify-between gap-3">
                 <p className="text-cream">{h}</p>
-                <button data-testid={`copy-hook-${i}`} onClick={() => copy(`${h}\n\n${affiliate?.link || ""}`)} className="btn-ghost text-xs shrink-0"><Copy className="w-3 h-3"/></button>
+                <button data-testid={`copy-hook-${h.slice(0,8)}`} onClick={() => copy(`${h}\n\n${affiliate?.link || ""}`)} className="btn-ghost text-xs shrink-0"><Copy className="w-3 h-3"/></button>
               </div>
             ))}
           </div>
@@ -403,9 +493,9 @@ function SalesWizard({ affiliate }) {
       {stage === "dm" && (
         <div className="panel p-8">
           <div className="overline mb-3">// STEP 4 · DM SCRIPT FOR {audience.toUpperCase() || "YOUR PERSON"}</div>
-          <div className="space-y-2">
-            {PROVEN_DM_OPENERS.map((d, i) => (
-              <div key={i} className="panel p-4">
+            <div className="space-y-2">
+            {PROVEN_DM_OPENERS.map((d) => (
+              <div key={d} className="panel p-4">
                 <p className="text-cream/90 leading-relaxed">{d.replace("[X]", "what you're moving through")}</p>
                 <button onClick={() => copy(`${d.replace("[X]", "what you're moving through")}\n\n${affiliate?.link || ""}`)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/>Copy</button>
               </div>
@@ -417,12 +507,12 @@ function SalesWizard({ affiliate }) {
       {stage === "objections" && (
         <div className="panel p-8">
           <div className="overline mb-3">// STEP 5 · WHEN THEY HESITATE</div>
-          <div className="space-y-3">
-            {PROVEN_OBJECTIONS.map((o, i) => (
-              <div key={i} className="panel p-4">
+            <div className="space-y-3">
+            {PROVEN_OBJECTIONS.map((o) => (
+              <div key={o.o} className="panel p-4">
                 <div className="overline mb-1">// "{o.o}"</div>
                 <p className="text-cream/90">{o.a}</p>
-                <button data-testid={`copy-objection-${i}`} onClick={() => copy(o.a)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/>Copy answer</button>
+                <button data-testid={`copy-objection-${o.o.slice(0,8)}`} onClick={() => copy(o.a)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/>Copy answer</button>
               </div>
             ))}
           </div>
@@ -433,11 +523,11 @@ function SalesWizard({ affiliate }) {
         <div className="panel p-8">
           <div className="overline mb-3">// STEP 6 · THE GENTLE SECOND TOUCH</div>
           <p className="text-textMuted mb-4">Most yeses come on the follow-up, not the first ask. Wait ~48 hours, then send <strong className="text-cream">one</strong> of these. Once. Never chase.</p>
-          <div className="space-y-2">
-            {PROVEN_FOLLOWUPS.map((f, i) => (
-              <div key={i} className="panel p-4">
+            <div className="space-y-2">
+            {PROVEN_FOLLOWUPS.map((f) => (
+              <div key={f} className="panel p-4">
                 <p className="text-cream/90 leading-relaxed">{f}</p>
-                <button data-testid={`copy-followup-${i}`} onClick={() => copy(`${f}\n\n${affiliate?.link || ""}`)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/>Copy</button>
+                <button data-testid={`copy-followup-${f.slice(0,8)}`} onClick={() => copy(`${f}\n\n${affiliate?.link || ""}`)} className="btn-ghost text-xs mt-3"><Copy className="w-3 h-3"/>Copy</button>
               </div>
             ))}
           </div>

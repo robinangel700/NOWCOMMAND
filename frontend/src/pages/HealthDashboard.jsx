@@ -24,8 +24,8 @@ export default function HealthDashboard() {
       </div>
       <h3 className="font-display text-2xl text-cream mb-4">What to do, in plain language</h3>
       <div className="space-y-2">
-        {h.alerts.map((a, i) => (
-          <div key={i} className="panel p-4 flex items-start gap-3">{icon(a.level)}<p className="text-cream/90">{a.msg}</p></div>
+        {h.alerts.map((a) => (
+          <div key={a.msg} className="panel p-4 flex items-start gap-3">{icon(a.level)}<p className="text-cream/90">{a.msg}</p></div>
         ))}
       </div>
     </div>

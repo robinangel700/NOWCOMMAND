@@ -22,8 +22,11 @@ import pytest
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://steward-platform-1.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
-ADMIN_EMAIL = "robinangel700@gmail.com"
-ADMIN_PASSWORD = "BoopLoop777"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", os.environ.get("ADMIN_EMAIL", "robinangel700@gmail.com"))
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD")
+
+if not ADMIN_PASSWORD:
+    pytest.skip("TEST_ADMIN_PASSWORD not set; skipping admin integration tests", allow_module_level=True)
 
 
 def _rand_email(prefix="TEST_i3"):

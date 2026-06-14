@@ -88,12 +88,21 @@ async def _publish_due_articles():
 
 async def _winback_inactive():
     db = get_db()
-    threshold = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+    now = datetime.now(timezone.utc)
+    threshold = (now - timedelta(days=14)).isoformat()
     cursor = db.users.find({"tier": {"$in": ["full", "foundational"]}, "last_login": {"$lt": threshold}})
     async for u in cursor:
-        last_wb = u.get("last_winback_at")
-        if last_wb and last_wb > (datetime.now(timezone.utc) - timedelta(days=7)).isoformat():
+        last_reengage = u.get("last_reengagement_at")
+        if last_reengage and last_reengage > (now - timedelta(days=7)).isoformat():
             continue
+
+        last_login = u.get("last_login")
+        if last_login and last_reengage and last_login > last_reengage:
+            await db.users.update_one({"id": u["id"]}, {
+                "$set": {"reengagement_stage": 0, "last_reengagement_at": None}
+            })
+            continue
+
         topic = "your dominion work"
         recent_note = await db.notes.find_one({"user_id": u["id"]}, sort=[("updated_at", -1)])
         if recent_note:
@@ -104,13 +113,37 @@ async def _winback_inactive():
             d = await db.drops.find_one({"published": True}, sort=[("published_at", -1)])
             if d:
                 topic = d.get("title", topic)
+
+        stage = u.get("reengagement_stage", 0)
+        if stage >= 3:
+            continue
+
+        if stage == 0:
+            if u.get("last_winback_at") and u.get("last_winback_at") > (now - timedelta(days=7)).isoformat():
+                continue
+            template_key = "winback"
+            next_stage = 1
+            kind = "winback"
+        elif stage == 1:
+            template_key = "reengagement_step2"
+            next_stage = 2
+            kind = "reengagement"
+        else:
+            template_key = "reengagement_step3"
+            next_stage = 3
+            kind = "reengagement"
+
         try:
             import email_templates as et
-            subj, html = et.render("winback", {"topic": topic, "frontend": os.environ.get("FRONTEND_BASE_URL", "")})
+            subj, html = et.render(template_key, {"topic": topic, "frontend": os.environ.get("FRONTEND_BASE_URL", "")})
         except Exception:
-            subj, html = "I noticed you stepped away", wrap_html("Step back in", f"<p>You were on {topic}.</p>")
-        await send_email(u["email"], subj, html, kind="winback")
-        await db.users.update_one({"id": u["id"]}, {"$set": {"last_winback_at": now_iso()}})
+            fallback_title = "I noticed you stepped away" if template_key == "winback" else "Your seat is still waiting"
+            subj, html = fallback_title, wrap_html(fallback_title, f"<p>You were on {topic}.</p>")
+
+        await send_email(u["email"], subj, html, kind=kind)
+        await db.users.update_one({"id": u["id"]}, {
+            "$set": {"reengagement_stage": next_stage, "last_reengagement_at": now_iso()}
+        })
 
 
 async def _ensure_weekly_win_thread():

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, fmt } from "../lib/api";
 import { Hourglass, ChevronLeft, Lock, Eye } from "lucide-react";
@@ -6,10 +6,22 @@ import { Hourglass, ChevronLeft, Lock, Eye } from "lucide-react";
 export function VaultIndex() {
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    api.get("/vault/articles").then((r) => { setArticles(r.data.articles); setLoading(false); }).catch(() => setLoading(false));
-    document.title = "NOWCOMMAND Vault";
+  const loadArticles = useCallback(async () => {
+    try {
+      const r = await api.get("/vault/articles");
+      setArticles(r.data.articles);
+    } catch (e) {
+      if (process.env.NODE_ENV === "development") console.error("Failed loading vault articles", e);
+      setArticles([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadArticles();
+    document.title = "NOWCOMMAND Vault";
+  }, [loadArticles]);
   return (
     <div className="min-h-screen px-6 lg:px-10 py-16">
       <div className="max-w-6xl mx-auto">
@@ -65,7 +77,7 @@ export function VaultArticle() {
           <div className="absolute inset-0 bg-gradient-to-b from-void/40 via-void/60 to-void"/>
         </div>
       )}
-      <div className="max-w-3xl mx-auto px-6 lg:px-10 -mt-32 relative">
+      <div className={`max-w-3xl mx-auto px-6 lg:px-10 relative ${a.cover_image_url ? "-mt-32" : "mt-10"}`}>
         <button onClick={() => nav("/vault")} className="overline flex items-center gap-2 mb-6"><ChevronLeft className="w-4 h-4"/>Back to vault</button>
         <div className="overline mb-4 flex items-center gap-2"><Lock className="w-3 h-3"/>VAULT &middot; {fmt.date(a.published_at)}</div>
         <h1 className="font-display text-5xl md:text-7xl text-cream leading-[1.0]">{a.title}</h1>

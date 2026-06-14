@@ -14,14 +14,14 @@ export default function Community() {
   const [comments, setComments] = useState({});
   const [commentBodies, setCommentBodies] = useState({});
 
-  const load = () => api.get("/community/feed").then((r) => setFeed(r.data)).catch(() => {});
+  const load = () => api.get("/community/feed").then((r) => setFeed(r.data)).catch((e) => { console.error("Community feed load failed", e); });
   useEffect(() => { load(); }, []);
 
   const post = async (e) => {
     e.preventDefault();
     if (!body.trim()) return;
     try { await api.post("/community/posts", { body, kind }); setBody(""); setKind("regular"); load(); toast.success("Posted"); }
-    catch { toast.error("Could not post"); }
+    catch (e) { console.error("Community post failed", e); toast.error("Could not post"); }
   };
 
   const loadComments = async (pid) => {

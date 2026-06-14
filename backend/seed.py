@@ -101,6 +101,17 @@ async def seed_all():
         if not existing_s:
             await db.settings.insert_one({"key": k, "value": v, "updated_at": now_iso()})
 
+    # ---- Indexes for affiliate collections
+    for coll_name, index_fields in [
+        ("affiliate_referrals", [("affiliate_user_id", 1), ("created_at", -1)]),
+        ("affiliate_payouts", [("user_id", 1), ("created_at", -1)]),
+        ("payment_transactions", [("session_id", 1)]),
+    ]:
+        try:
+            await db[coll_name].create_index(index_fields)
+        except Exception:
+            pass  # index may already exist
+
     # ---- Deliverable checklist
     # Remove legacy MVP titles that have been superseded by new richer items
     LEGACY_TITLES = [

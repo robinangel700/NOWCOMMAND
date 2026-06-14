@@ -17,11 +17,17 @@ export default function Landing() {
   const { user } = useAuth();
   const nav = useNavigate();
 
+  // Capture affiliate referral code from URL and persist it
+  useEffect(() => {
+    const ref = params.get("ref");
+    if (ref) {
+      sessionStorage.setItem("affiliate_ref", ref.trim().toUpperCase());
+    }
+  }, [params]);
+
   useEffect(() => {
     api.get("/public/state").then((r) => setState(r.data));
     api.get("/public/articles").then((r) => setBlog(r.data));
-    const ref = params.get("ref");
-    if (ref) localStorage.setItem("nowcommand_ref", ref);
   }, [params]);
 
   const submitOptin = async (e) => {
@@ -31,7 +37,7 @@ export default function Landing() {
       setOptinEmail("");
       const { toast } = await import("sonner");
       toast.success("You're on the list. Watch your inbox.");
-    } catch {}
+    } catch (e) { console.error("Opt-in failed", e); const { toast } = await import("sonner"); toast.error("Could not join list"); }
   };
 
   const headlinePrice = state ? fmt.money(state.current_full_monthly_cents) : "$44";
@@ -158,7 +164,7 @@ export default function Landing() {
               { h: "Charge up. Claim territory.", p: "Step into your breakthrough season — not next year, this week. The drop is already scheduled." },
               { h: "Rewrite the bloodline.", p: "Actively rewrite your family's future history. The atmosphere you carry becomes the ceiling they inherit." },
             ].map((c, i) => (
-              <div key={i} className="bg-void p-8 md:p-10">
+              <div key={c.h} className="bg-void p-8 md:p-10">
                 <div className="overline mb-4">// 0{i + 1}</div>
                 <h3 className="font-display text-2xl text-cream mb-3 leading-tight">{c.h}</h3>
                 <p className="text-textMuted leading-relaxed">{c.p}</p>
@@ -188,8 +194,8 @@ export default function Landing() {
             { icon: Hourglass, h: "Evict Chronos", p: "Break agreement with delay. Reclaim your timeline." },
             { icon: Sparkles, h: "Operate in Kairos", p: "Move on divine signal. Strike inside the window." },
             { icon: Zap, h: "Get activated", p: "Codes from Robin Angel. Begin your own rule over the increase." },
-          ].map((c, i) => (
-            <div key={i} className="bg-void p-8">
+          ].map((c) => (
+            <div key={c.h} className="bg-void p-8">
               <c.icon className="w-7 h-7 text-gold mb-5" />
               <h3 className="font-display text-2xl text-cream mb-2">{c.h}</h3>
               <p className="text-textMuted text-sm leading-relaxed">{c.p}</p>
@@ -215,7 +221,7 @@ export default function Landing() {
               ["A-la-carte Drops", "Single high-value assets, priced individually. Members and non-members alike can purchase."],
               ["Sovereign Billing", "Pause instead of cancel. Downgrade to foundational. Card auto-update. Smart retry on failure."],
             ].map(([h, p], i) => (
-              <div key={i} className="panel p-7">
+              <div key={h} className="panel p-7">
                 <div className="overline mb-3">// 0{i + 1}</div>
                 <h3 className="font-display text-2xl text-cream mb-2">{h}</h3>
                 <p className="text-textMuted text-sm leading-relaxed">{p}</p>

@@ -28,7 +28,7 @@ export function DropDetail() {
   const load = () => api.get(`/drops/${id}`).then((r) => {
     setData(r.data);
     setNoteBody(r.data?.note?.body || "");
-  }).catch(() => {});
+  }).catch((e) => { console.error("Drop detail load failed", e); });
   const loadComments = () => api.get(`/drops/${id}/comments`).then((r) => setComments(r.data.comments));
 
   useEffect(() => { load(); loadComments(); }, [id]); // eslint-disable-line
@@ -45,7 +45,7 @@ export function DropDetail() {
   const saveNote = async () => {
     setBusy(true);
     try { await api.post("/notes", { drop_id: id, body: noteBody }); toast.success("Note saved (private)"); }
-    catch { toast.error("Could not save"); }
+    catch (e) { console.error("Save note failed", e); toast.error("Could not save"); }
     setBusy(false);
   };
   const submitQuiz = async () => {
@@ -62,7 +62,7 @@ export function DropDetail() {
       setCommentBody("");
       loadComments();
       toast.success(crossPost ? "Posted & shared to community" : "Posted on this drop");
-    } catch { toast.error("Could not post"); }
+    } catch (e) { console.error("Post comment failed", e); toast.error("Could not post"); }
   };
   const delComment = async (cid) => {
     if (!window.confirm("Delete comment?")) return;
@@ -109,9 +109,9 @@ export function DropDetail() {
           <div className="mt-10 panel p-6">
             <div className="overline mb-3">// RELATED LINKS</div>
             <ul className="space-y-2">
-              {d.related_links.map((l, i) => (
-                <li key={i}><a href={l.url} target="_blank" rel="noreferrer" className="text-gold hover:underline flex items-center gap-2"><ExternalLink className="w-3 h-3"/>{l.title || l.url}</a></li>
-              ))}
+              {d.related_links.map((l) => (
+                  <li key={l.url || l.title}><a href={l.url} target="_blank" rel="noreferrer" className="text-gold hover:underline flex items-center gap-2"><ExternalLink className="w-3 h-3"/>{l.title || l.url}</a></li>
+                ))}
             </ul>
           </div>
         )}
@@ -129,11 +129,11 @@ export function DropDetail() {
             <h2 className="font-display text-2xl sm:text-3xl text-cream mb-6">{data.quiz.title}</h2>
             <div className="space-y-6">
               {data.quiz.questions.map((q, i) => (
-                <div key={i}>
+                <div key={q.id || `${q.q}-${i}`}>
                   <div className="text-cream mb-2">{i + 1}. {q.q}</div>
                   <div className="space-y-2">
                     {q.options.map((o, oi) => (
-                      <label key={oi} className="flex items-center gap-3 cursor-pointer">
+                      <label key={q.id ? `${q.id}-opt-${oi}` : `${q.q}-${oi}`} className="flex items-center gap-3 cursor-pointer">
                         <input type="radio" name={`q${i}`} checked={quizAnswers[i] === oi} onChange={() => setQuizAnswers({ ...quizAnswers, [i]: oi })} style={{width:16,height:16}}/>
                         <span className="text-textMuted">{o}</span>
                       </label>

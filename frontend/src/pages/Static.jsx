@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { api } from "../lib/api";
 
 export function LegalPage() {
@@ -8,7 +9,7 @@ export function LegalPage() {
   const [d, setD] = useState(null);
   useEffect(() => { api.get(`/public/legal/${doc}`).then((r) => { setD(r.data); document.title = `${r.data.title} · NOWCOMMAND`; }); }, [doc]);
   if (!d) return null;
-  const html = marked.parse(d.body_md || "");
+  const html = DOMPurify.sanitize(marked.parse(d.body_md || ""));
   return (
     <div className="min-h-screen px-4 sm:px-6 lg:px-10 py-16">
       <div className="max-w-3xl mx-auto">
@@ -37,8 +38,8 @@ export function FAQPage() {
             <section key={s.title}>
               <h2 className="font-display text-2xl text-gold mb-4">{s.title}</h2>
               <div className="space-y-2">
-                {s.qa.map((q, i) => {
-                  const key = `${s.title}-${i}`;
+                {s.qa.map((q) => {
+                  const key = `${s.title}-${q.q}`;
                   return (
                     <button key={key} onClick={() => setOpen({...open, [key]: !open[key]})} className="block w-full text-left panel p-5 hover:border-borderGoldHi">
                       <div className="flex items-start justify-between gap-3">

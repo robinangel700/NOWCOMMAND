@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Hourglass, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { api, fmt } from "../lib/api";
@@ -10,24 +10,54 @@ export default function Pricing() {
   const [state, setState] = useState(null);
   const [busy, setBusy] = useState(null);
   const [waitEmail, setWaitEmail] = useState("");
+  const [autoStarted, setAutoStarted] = useState(false);
   const { user } = useAuth();
   const nav = useNavigate();
+  const [params] = useSearchParams();
+  const autoPlan = params.get("auto");
 
-  useEffect(() => { api.get("/public/state").then((r) => setState(r.data)); }, []);
+  // Capture affiliate referral code from URL
+  useEffect(() => {
+    const ref = params.get("ref");
+    if (ref) {
+      sessionStorage.setItem("affiliate_ref", ref.trim().toUpperCase());
+    }
+  }, [params]);
 
-  const startCheckout = async (plan) => {
+  useEffect(() => {
+    api.get("/public/state").then((r) => setState(r.data));
+  }, []);
+
+  const startCheckout = useCallback(async (plan) => {
     if (!user) { nav(`/signup?plan=${plan}`); return; }
     if (!state?.doors_open) { toast.error("Doors are closed. Join the waitlist."); return; }
+    if (!state?.stripe_real) { toast.error("Stripe is not configured correctly. Checkout is unavailable."); return; }
     setBusy(plan);
     try {
-      const { data } = await api.post("/checkout/subscription", { plan, origin_url: window.location.origin });
-      if (data.dev_mode) toast.info("Dev mode: Stripe key not live. Simulating checkout.");
+      const payload = { plan, origin_url: window.location.origin };
+      const ref = sessionStorage.getItem("affiliate_ref");
+      if (ref) payload.ref = ref;
+      const { data } = await api.post("/checkout/subscription", payload);
       window.location.href = data.url;
     } catch (e) {
       toast.error(e?.response?.data?.detail || "Could not start checkout");
       setBusy(null);
     }
-  };
+  }, [nav, state, user, setBusy]);
+
+  useEffect(() => {
+    if (!autoPlan || autoStarted || !state) return;
+    if (!user) {
+      nav(`/signup?plan=${autoPlan}`);
+      return;
+    }
+    if (!state.doors_open) {
+      toast.error("Doors are closed. Join the waitlist.");
+      return;
+    }
+    setAutoStarted(true);
+    startCheckout(autoPlan);
+  }, [autoPlan, autoStarted, user, state, nav, startCheckout]);
 
   const joinWaitlist = async (e) => {
     e.preventDefault();
@@ -35,7 +65,9 @@ export default function Pricing() {
       await api.post("/public/waitlist", { email: waitEmail });
       toast.success("You're on the waitlist. We'll reach out when a seat opens.");
       setWaitEmail("");
-    } catch { toast.error("Could not join waitlist"); }
+    } catch (error) {
+      toast.error("Could not join waitlist");
+    }
   };
 
   if (!state) return <div className="min-h-screen flex items-center justify-center"><Hourglass className="w-6 h-6 text-gold animate-glow" /></div>;
@@ -95,6 +127,20 @@ export default function Pricing() {
           </div>
         )}
 
+        {autoPlan && (
+          <div className="mt-10 rounded border border-gold/20 bg-gold/5 p-5 text-sm text-cream">
+            {user
+              ? "You're already signed in. Completing Stripe checkout now is the last step before access is granted."
+              : "Sign up first and you'll be sent directly into Stripe checkout to complete the purchase before access is activated."}
+          </div>
+        )}
+
+        {!state.stripe_real && (
+          <div className="mt-10 p-6 border border-ruby/60 bg-ruby/10">
+            <div className="overline text-cream mb-2">// STRIPE NOT CONFIGURED</div>
+            <p className="text-cream/80">Checkout is disabled until a real Stripe secret key is installed in the backend. This prevents unpaid users from bypassing the flow.</p>
+          </div>
+        )}
         <div className="grid md:grid-cols-2 gap-px bg-borderGold mt-16">
           {plans.map((p) => (
             <div key={p.key} className={`bg-void p-8 md:p-10 ${p.highlight ? "ring-1 ring-gold" : ""}`}>
@@ -117,7 +163,7 @@ export default function Pricing() {
               </ul>
               <button
                 data-testid={`buy-${p.key}`}
-                disabled={busy === p.key || !state.doors_open}
+                disabled={busy === p.key || !state.doors_open || !state.stripe_real}
                 onClick={() => startCheckout(p.key)}
                 className={`mt-8 w-full ${p.highlight ? "btn-gold" : "btn-ghost"} justify-center disabled:opacity-50`}
               >

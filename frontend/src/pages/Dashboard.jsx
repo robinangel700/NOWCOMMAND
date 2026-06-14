@@ -25,11 +25,11 @@ export default function Dashboard() {
   const [dominion, setDominion] = useState(null);
 
   useEffect(() => {
-    api.get("/progress").then((r) => setProgress(r.data));
-    api.get("/drops").then((r) => setDrops(r.data.drops || []));
-    api.get("/public/state").then(() => {});
-    api.get("/me/badges").then((r) => setBadges(r.data)).catch(() => {});
-    api.get("/dominion").then((r) => setDominion(r.data)).catch(() => {});
+    api.get("/progress").then((r) => setProgress(r.data)).catch((e) => { console.error("Progress load failed", e); });
+    api.get("/drops").then((r) => setDrops(r.data.drops || [])).catch((e) => { console.error("Drops load failed", e); setDrops([]); });
+    api.get("/public/state").then(() => {}).catch((e) => { console.error("Public state load failed", e); });
+    api.get("/me/badges").then((r) => setBadges(r.data)).catch((e) => { console.error("Badges load failed", e); });
+    api.get("/dominion").then((r) => setDominion(r.data)).catch((e) => { console.error("Dominion load failed", e); });
     const params = new URLSearchParams(location.search);
     if (params.get("wizard") === "1") {
       setShowWizard(true);
@@ -49,7 +49,7 @@ export default function Dashboard() {
       a.download = "Mammon_Breaker_Activation_Codes.pdf";
       a.click(); window.URL.revokeObjectURL(url);
       toast.success("Codes downloaded");
-    } catch { toast.error("Unable to download"); }
+    } catch (e) { console.error("PDF download failed", e); toast.error("Unable to download"); }
   };
 
   const downloadBook = async () => {
@@ -64,7 +64,7 @@ export default function Dashboard() {
       const url = window.URL.createObjectURL(new Blob([resp.data], { type: "application/pdf" }));
       const a = document.createElement("a"); a.href = url; a.download = "Dominion_Over_Mammon.pdf"; a.click(); window.URL.revokeObjectURL(url);
       toast.success("Book downloaded");
-    } catch { toast.error("Could not download"); }
+    } catch (e) { console.error("Book download failed", e); toast.error("Could not download"); }
   };
 
   const published = drops.filter((d) => d.published && !d.locked);
@@ -115,8 +115,8 @@ export default function Dashboard() {
             { icon: BookOpen, label: "Notes saved", v: progress?.notes_count ?? 0 },
             { icon: TrendingUp, label: "Quizzes taken", v: progress?.quizzes_taken ?? 0 },
             { icon: Clock, label: "Days since last login", v: progress?.days_since_last_login ?? 0 },
-          ].map((s, i) => (
-            <div key={i} className="bg-void p-6 md:p-8">
+          ].map((s) => (
+            <div key={s.label} className="bg-void p-6 md:p-8">
               <s.icon className="w-5 h-5 text-gold mb-3" />
               <div className="font-display text-4xl text-cream">{s.v}</div>
               <div className="overline mt-2 text-[10px]">{s.label}</div>

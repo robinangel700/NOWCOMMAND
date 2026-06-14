@@ -46,7 +46,7 @@ export default function CheckoutSuccess() {
       a.click();
       window.URL.revokeObjectURL(url);
       toast.success("Download started");
-    } catch { toast.error("Could not download — try the dashboard"); }
+    } catch (e) { console.error("PDF download failed", e); toast.error("Could not download — try the dashboard"); }
   };
 
   return (
@@ -76,13 +76,13 @@ export default function CheckoutSuccess() {
                   const url = window.URL.createObjectURL(new Blob([resp.data], { type: "application/pdf" }));
                   const a = document.createElement("a"); a.href = url; a.download = "Dominion_Over_Mammon.pdf"; a.click(); window.URL.revokeObjectURL(url);
                   toast.success("Book downloaded");
-                } catch { toast.error("Could not download"); }
+                } catch (e) { console.error("Book download failed", e); toast.error("Could not download"); }
               }} className="btn-ghost"><Download className="w-4 h-4" /> Welcome Book</button>
               <button data-testid="go-dashboard" onClick={() => nav("/dashboard")} className="btn-ghost">Enter your dashboard</button>
             </div>
             <ul className="mt-10 space-y-3 text-sm text-textMuted">
-              {["Read the codes once tonight.","Open the Manifesto in the Community Vault.","Post in the Weekly Biggest Win thread.","Saturday's drop is already scheduled."].map((s,i)=>(
-                <li key={i} className="flex gap-3"><Check className="w-4 h-4 text-gold mt-0.5"/>{s}</li>
+              {["Read the codes once tonight.","Open the Manifesto in the Community Vault.","Post in the Weekly Biggest Win thread.","Saturday's drop is already scheduled."].map((s) => (
+                <li key={s} className="flex gap-3"><Check className="w-4 h-4 text-gold mt-0.5"/>{s}</li>
               ))}
             </ul>
           </div>

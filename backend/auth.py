@@ -4,7 +4,7 @@ import bcrypt
 import jwt
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, status, Cookie
 from db import get_db
 
 
@@ -33,10 +33,14 @@ def decode_token(token: str) -> dict:
     return jwt.decode(token, os.environ["JWT_SECRET"], algorithms=[os.environ.get("JWT_ALGO", "HS256")])
 
 
-async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
-    if not authorization or not authorization.startswith("Bearer "):
+async def get_current_user(authorization: Optional[str] = Header(None), nowcommand_token: Optional[str] = Cookie(None)) -> dict:
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+    elif nowcommand_token:
+        token = nowcommand_token
+    else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-    token = authorization.split(" ", 1)[1]
     try:
         payload = decode_token(token)
     except Exception:

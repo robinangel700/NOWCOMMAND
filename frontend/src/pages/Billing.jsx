@@ -27,28 +27,28 @@ export default function Billing() {
   const pause = async () => {
     setBusy(true);
     try { await api.post("/billing/cancel", { action: "pause" }); await refresh(); toast.success("Paused. Resume anytime."); setStage("idle"); }
-    catch { toast.error("Couldn't pause"); } finally { setBusy(false); }
+    catch (e) { console.error("Pause request failed", e); toast.error("Couldn't pause"); } finally { setBusy(false); }
   };
   const resume = async () => {
     setBusy(true);
     try { await api.post("/billing/resume"); await refresh(); toast.success("Resumed."); }
-    catch { toast.error("Couldn't resume"); } finally { setBusy(false); }
+    catch (e) { console.error("Resume request failed", e); toast.error("Couldn't resume"); } finally { setBusy(false); }
   };
   const downgrade = async () => {
     setBusy(true);
     try { await api.post("/billing/cancel", { action: "downgrade" }); await refresh(); toast.success("Switched to Foundational"); setStage("idle"); }
-    catch { toast.error("Couldn't downgrade"); } finally { setBusy(false); }
+    catch (e) { console.error("Downgrade request failed", e); toast.error("Couldn't downgrade"); } finally { setBusy(false); }
   };
   const cancel = async () => {
     setBusy(true);
     try { await api.post("/billing/cancel", { action: "cancel", reason }); await refresh(); toast.success("Canceled. We hope you return."); nav("/"); }
-    catch { toast.error("Couldn't cancel"); } finally { setBusy(false); }
+    catch (e) { console.error("Cancellation request failed", e); toast.error("Couldn't cancel"); } finally { setBusy(false); }
   };
   const openPortal = async () => {
     try {
       const { data } = await api.post("/billing/portal", { return_url: window.location.origin + "/billing" });
       if (data.url) window.location.href = data.url;
-    } catch { toast.error("Portal unavailable (dev mode)"); }
+    } catch (e) { console.error("Billing portal request failed", e); toast.error("Portal unavailable (dev mode)"); }
   };
 
   const tier = user?.tier || "none";
@@ -103,8 +103,8 @@ export default function Billing() {
               <h2 className="font-display text-4xl text-cream">Before you go &mdash; what you lose</h2>
               <p className="text-textMuted mt-3">Cancellation is final. The following is permanently removed from your account:</p>
               <ul className="mt-6 space-y-3">
-                {LOST_LIST.map((s, i) => (
-                  <li key={i} data-testid={`loss-${i}`} className="flex gap-3 text-cream/80">
+                {LOST_LIST.map((s) => (
+                  <li key={s} data-testid={`loss-${s}`} className="flex gap-3 text-cream/80">
                     <X className="w-4 h-4 text-ruby mt-0.5 shrink-0"/> <span>{s}</span>
                   </li>
                 ))}
