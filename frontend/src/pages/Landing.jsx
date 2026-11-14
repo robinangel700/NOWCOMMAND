@@ -58,7 +58,7 @@ export default function Landing() {
               Rule over the <span className="italic">Increase</span>.<br/>
               Operate in <span className="bg-gold-grad">Kairos</span>.
             </h1>
-            <p className="mt-8 text-lg md:text-xl text-textMuted max-w-2xl leading-relaxed">
+            <p className="ra-authentic-anglo mt-8 text-lg md:text-xl text-textMuted max-w-2xl leading-relaxed">
               NOWCOMMAND is the private membership where Robin Angel transmits the codes that evict the spirit of delay,
               dethrone the spirit of money, and seat you in divine timing. <span className="text-cream">You are not subscribing. You are crossing a threshold.</span>
             </p>
